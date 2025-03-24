@@ -292,6 +292,19 @@ export const usePopularCommunities = () => {
   });
 };
 
+// Add the missing useTrendingPosts function
+export const useTrendingPosts = () => {
+  return useQuery({
+    queryKey: ["trendingPosts"],
+    queryFn: fetchAllPosts, // Using fetchAllPosts as a substitute for trending posts
+    meta: {
+      onError: (error: Error) => {
+        toast.error(`Failed to fetch trending posts: ${error.message}`);
+      }
+    }
+  });
+};
+
 export const useAllPosts = () => {
   return useQuery({
     queryKey: ["posts"],
