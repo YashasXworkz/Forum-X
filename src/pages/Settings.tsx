@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -15,7 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
-import { User, Bell, Shield, Volume, Language, CreditCard, Download, Settings as SettingsIcon } from "lucide-react";
+import { User, Bell, Shield, Volume, Globe, CreditCard, Download, Settings as SettingsIcon } from "lucide-react";
 
 const Settings = () => {
   const { user, updateUser, logout } = useAuth();
@@ -136,7 +135,7 @@ const Settings = () => {
                     Room & Community
                   </TabsTrigger>
                   <TabsTrigger value="language" className="justify-start w-full">
-                    <Language className="mr-2 h-4 w-4" />
+                    <Globe className="mr-2 h-4 w-4" />
                     Language & Content
                   </TabsTrigger>
                   <TabsTrigger value="payments" className="justify-start w-full">
