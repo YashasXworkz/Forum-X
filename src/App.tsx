@@ -16,6 +16,7 @@ import Communities from "./pages/Communities";
 import CreatePost from "./pages/CreatePost";
 import CreateCommunity from "./pages/CreateCommunity";
 import Discussions from "./pages/Discussions";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -44,6 +45,7 @@ const App = () => (
             <Route path="/create-post" element={<CreatePost />} />
             <Route path="/create-community" element={<CreateCommunity />} />
             <Route path="/discussions" element={<Discussions />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
