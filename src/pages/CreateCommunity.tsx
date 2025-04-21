@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -10,20 +9,24 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ArrowLeft } from "lucide-react";
 import { Layout } from "@/components/layout/Layout";
 import { useAuth } from "@/lib/auth";
-import { toast } from "@/hooks/use-toast";
+import { useToast } from "@/hooks/use-toast";
+import axios from "axios";
+import { API_URL } from "@/lib/api";
 
 const CreateCommunity = () => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
   
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
   const [privacy, setPrivacy] = useState("public");
+  const [category, setCategory] = useState("general");
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   useEffect(() => {
-    if (!user) {
+    if (!user || !token) {
       toast({
         title: "Authentication required",
         description: "You need to be logged in to create a community",
@@ -31,7 +34,7 @@ const CreateCommunity = () => {
       });
       navigate("/login");
     }
-  }, [user, navigate]);
+  }, [user, token, navigate, toast]);
   
   // Generate slug from name
   useEffect(() => {
@@ -67,20 +70,36 @@ const CreateCommunity = () => {
     setIsSubmitting(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const communityData = {
+        name,
+        description,
+        category,
+        isPrivate: privacy === "private"
+      };
+      
+      const response = await axios.post(
+        `${API_URL}/api/communities`,
+        communityData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+      
+      const communityResponse = response.data.data;
       
       toast({
         title: "Community created",
-        description: `r/${slug} has been created successfully!`,
+        description: `r/${name} has been created successfully!`,
       });
       
       // Redirect to the new community
-      navigate(`/community/${slug}`);
-    } catch (error) {
+      navigate(`/community/${communityResponse.slug || communityResponse._id}`);
+    } catch (error: any) {
       toast({
-        title: "Error",
-        description: "Failed to create community. Please try again.",
+        title: "Error creating community",
+        description: error.response?.data?.message || error.response?.data?.error || "Failed to create community. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -157,6 +176,33 @@ const CreateCommunity = () => {
               </div>
               
               <div className="space-y-2">
+                <Label htmlFor="category">Category</Label>
+                <select
+                  id="category"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={isSubmitting}
+                >
+                  <option value="general">General</option>
+                  <option value="technology">Technology</option>
+                  <option value="gaming">Gaming</option>
+                  <option value="music">Music</option>
+                  <option value="art">Art</option>
+                  <option value="books">Books</option>
+                  <option value="photography">Photography</option>
+                  <option value="food">Food</option>
+                  <option value="travel">Travel</option>
+                  <option value="sports">Sports</option>
+                  <option value="fitness">Fitness</option>
+                  <option value="education">Education</option>
+                  <option value="science">Science</option>
+                  <option value="business">Business</option>
+                  <option value="entertainment">Entertainment</option>
+                </select>
+              </div>
+              
+              <div className="space-y-2">
                 <Label>Community Type</Label>
                 <RadioGroup value={privacy} onValueChange={setPrivacy}>
                   <div className="flex items-start space-x-2">
@@ -188,16 +234,12 @@ const CreateCommunity = () => {
                   </div>
                 </RadioGroup>
               </div>
+              
+              <Button type="submit" disabled={isSubmitting} className="w-full">
+                {isSubmitting ? "Creating..." : "Create Community"}
+              </Button>
             </form>
           </CardContent>
-          <CardFooter className="flex justify-end space-x-2">
-            <Button variant="outline" onClick={() => navigate(-1)} disabled={isSubmitting}>
-              Cancel
-            </Button>
-            <Button onClick={handleSubmit} disabled={isSubmitting}>
-              {isSubmitting ? "Creating..." : "Create Community"}
-            </Button>
-          </CardFooter>
         </Card>
       </div>
     </Layout>

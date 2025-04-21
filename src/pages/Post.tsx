@@ -1,61 +1,102 @@
-
 import React, { useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { Layout } from "@/components/layout/Layout";
 import { PostCard } from "@/components/post/PostCard";
 import { CommentSection } from "@/components/post/CommentSection";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
 import { usePost, usePostComments } from "@/lib/api";
-import { Layout } from "@/components/layout/Layout";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
 const Post = () => {
   const { postId } = useParams<{ postId: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   
+  // Fetch post data
   const { 
     data: post, 
     isLoading: isLoadingPost, 
-    error: postError 
+    error: postError
   } = usePost(postId || "");
   
-  const {
+  // Fetch comments for the post
+  const { 
     data: comments = [],
-    isLoading: isLoadingComments
+    isLoading: isLoadingComments,
+    error: commentsError
   } = usePostComments(postId || "");
   
   useEffect(() => {
     if (postError) {
-      navigate("/not-found", { replace: true });
+      toast.error("Failed to load post data");
+      // Still navigate away if the post is truly not found
+      if ((postError as any)?.response?.status === 404) {
+        navigate("/not-found", { replace: true });
+      }
     }
-  }, [postError, navigate]);
+    
+    if (commentsError) {
+      toast.error("Failed to load comments");
+    }
+  }, [postError, commentsError, navigate]);
+  
+  // Handle post deletion
+  const handlePostDeleted = () => {
+    // Navigate back after successful deletion
+    navigate(-1);
+  };
   
   if (isLoadingPost) {
     return (
       <Layout>
-        <div className="max-w-4xl mx-auto">
-          <div className="animate-pulse space-y-4">
-            <div className="h-8 w-24 bg-muted rounded"></div>
-            <div className="h-96 bg-muted rounded"></div>
-            <div className="h-12 bg-muted rounded"></div>
-            <div className="h-64 bg-muted rounded"></div>
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          <div className="mb-6">
+            <div className="h-8 w-40 rounded-md bg-gray-200 animate-pulse"></div>
+          </div>
+          <div className="space-y-4">
+            <div className="h-10 w-3/4 rounded-md bg-gray-200 animate-pulse"></div>
+            <div className="h-6 w-1/4 rounded-md bg-gray-200 animate-pulse"></div>
+            <div className="h-40 w-full rounded-md bg-gray-200 animate-pulse"></div>
           </div>
         </div>
       </Layout>
     );
   }
   
-  if (!post) {
-    return null; // Will redirect via useEffect
+  if (!post && !isLoadingPost) {
+    return (
+      <Layout>
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center py-10">
+            <h2 className="text-2xl font-bold">Post not found</h2>
+            <p className="mt-2 text-muted-foreground">
+              The post you're looking for doesn't exist or has been removed.
+            </p>
+            <Button 
+              variant="default" 
+              className="mt-4"
+              onClick={() => navigate(-1)}
+            >
+              Go back
+            </Button>
+          </div>
+        </div>
+      </Layout>
+    );
   }
-
+  
+  // Get the post ID - handle both id or _id formats
+  const effectivePostId = post ? (post.id || (post as any)._id || "") : "";
+  
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto animate-fade-in">
-        <div className="mb-4">
+      <div className="max-w-4xl mx-auto px-4 py-6">
+        <div className="mb-6">
           <Button 
             variant="ghost" 
             size="sm" 
-            className="flex items-center text-muted-foreground"
             onClick={() => navigate(-1)}
           >
             <ArrowLeft className="mr-1 h-4 w-4" />
@@ -63,14 +104,17 @@ const Post = () => {
           </Button>
         </div>
         
-        <PostCard post={post} isDetailed />
-        
-        <div className="mt-6">
-          <CommentSection 
-            postId={post.id} 
-            comments={comments}
-          />
-        </div>
+        {post && (
+          <>
+            {/* Use type assertion to satisfy the PostCard component */}
+            <PostCard post={post as any} onPostDeleted={handlePostDeleted} />
+            
+            <CommentSection 
+              postId={effectivePostId}
+              comments={comments}
+            />
+          </>
+        )}
       </div>
     </Layout>
   );

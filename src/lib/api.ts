@@ -1,7 +1,7 @@
-
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { createSlug } from "./utils";
+import axios from "axios";
+import api from './axios';
 
 // Types
 export interface Community {
@@ -47,224 +47,78 @@ export interface Reply extends Omit<Comment, 'replies'> {
   parentId: string;
 }
 
-// Mock Data
-const MOCK_COMMUNITIES: Community[] = [
-  {
-    id: "1",
-    name: "Technology",
-    slug: "technology",
-    description: "Discuss the latest in tech news, gadgets, and software.",
-    memberCount: 12500,
-    imageUrl: "",
-    createdAt: new Date().toISOString(),
-    isPopular: true
-  },
-  {
-    id: "2",
-    name: "Gaming",
-    slug: "gaming",
-    description: "A community for gaming enthusiasts to share news, memes, and discussions.",
-    memberCount: 8900,
-    imageUrl: "",
-    createdAt: new Date().toISOString(),
-    isPopular: true
-  },
-  {
-    id: "3",
-    name: "Science",
-    slug: "science",
-    description: "Exploring scientific breakthroughs, research, and curiosities.",
-    memberCount: 6200,
-    imageUrl: "",
-    createdAt: new Date().toISOString(),
-    isPopular: true
-  },
-  {
-    id: "4",
-    name: "Photography",
-    slug: "photography",
-    description: "Share your photos, techniques, and gear discussions.",
-    memberCount: 4500,
-    imageUrl: "",
-    createdAt: new Date().toISOString(),
-    isPopular: false
-  },
-  {
-    id: "5",
-    name: "Movies",
-    slug: "movies",
-    description: "Discuss films, directors, and everything cinema.",
-    memberCount: 7300,
-    imageUrl: "",
-    createdAt: new Date().toISOString(),
-    isPopular: true
-  }
-];
+// Use environment variables for API URL with fallback
+export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-const MOCK_POSTS: Post[] = [
-  {
-    id: "1",
-    title: "The Future of AI in Everyday Life",
-    content: "Artificial intelligence is rapidly transforming how we interact with technology...",
-    authorId: "1",
-    authorUsername: "johnsmith",
-    communityId: "1",
-    communityName: "Technology",
-    communitySlug: "technology",
-    upvotes: 235,
-    downvotes: 12,
-    commentCount: 48,
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
-    imageUrl: ""
-  },
-  {
-    id: "2",
-    title: "What's your favorite indie game of 2023?",
-    content: "I've been playing a lot of indie games lately and wanted to share my favorites...",
-    authorId: "2",
-    authorUsername: "gamer123",
-    communityId: "2",
-    communityName: "Gaming",
-    communitySlug: "gaming",
-    upvotes: 189,
-    downvotes: 5,
-    commentCount: 76,
-    createdAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(), // 6 hours ago
-    imageUrl: ""
-  },
-  {
-    id: "3",
-    title: "New breakthrough in quantum computing announced",
-    content: "Researchers have achieved a significant milestone in quantum computing that could revolutionize...",
-    authorId: "3",
-    authorUsername: "sciencefan",
-    communityId: "3",
-    communityName: "Science",
-    communitySlug: "science",
-    upvotes: 412,
-    downvotes: 8,
-    commentCount: 32,
-    createdAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(), // 12 hours ago
-    imageUrl: ""
-  },
-  {
-    id: "4",
-    title: "Sunset shot with my new camera - feedback welcome",
-    content: "I just got a new Sony A7III and took this sunset shot. Would love some constructive feedback...",
-    authorId: "4",
-    authorUsername: "photolover",
-    communityId: "4",
-    communityName: "Photography",
-    communitySlug: "photography",
-    upvotes: 98,
-    downvotes: 2,
-    commentCount: 15,
-    createdAt: new Date(Date.now() - 18 * 60 * 60 * 1000).toISOString(), // 18 hours ago
-    imageUrl: "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80"
-  },
-  {
-    id: "5",
-    title: "Top 10 must-watch films of all time",
-    content: "After years of watching movies, I've compiled my list of the top 10 must-watch films...",
-    authorId: "5",
-    authorUsername: "cinephile",
-    communityId: "5",
-    communityName: "Movies",
-    communitySlug: "movies",
-    upvotes: 276,
-    downvotes: 34,
-    commentCount: 92,
-    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // 24 hours ago
-    imageUrl: ""
+// Updated API Functions with real endpoints
+const fetchAllPosts = async (): Promise<Post[]> => {
+  try {
+    const response = await api.get('/api/posts');
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching posts:", error);
+    throw new Error("Failed to fetch posts");
   }
-];
+};
 
-const MOCK_COMMENTS: Comment[] = [
-  {
-    id: "1",
-    postId: "1",
-    authorId: "2",
-    authorUsername: "gamer123",
-    content: "This is a fascinating perspective on AI. I think we're only scratching the surface of what's possible.",
-    upvotes: 42,
-    downvotes: 2,
-    createdAt: new Date(Date.now() - 1.5 * 60 * 60 * 1000).toISOString(), // 1.5 hours ago
-    replies: [
-      {
-        id: "101",
-        postId: "1",
-        parentId: "1",
-        authorId: "1",
-        authorUsername: "johnsmith",
-        content: "Thanks! I'm particularly excited about AI in healthcare.",
-        upvotes: 15,
-        downvotes: 0,
-        createdAt: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString() // 1 hour ago
-      }
-    ]
-  },
-  {
-    id: "2",
-    postId: "1",
-    authorId: "3",
-    authorUsername: "sciencefan",
-    content: "I have some concerns about AI ethics that I think aren't addressed enough in the tech community.",
-    upvotes: 28,
-    downvotes: 5,
-    createdAt: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(), // 1 hour ago
-    replies: []
-  }
-];
-
-// API Mock Functions
 const fetchAllCommunities = async (): Promise<Community[]> => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 800));
-  return MOCK_COMMUNITIES;
+  try {
+    const response = await api.get('/api/communities');
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching communities:", error);
+    throw new Error("Failed to fetch communities");
+  }
 };
 
 const fetchPopularCommunities = async (): Promise<Community[]> => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 800));
-  return MOCK_COMMUNITIES.filter(community => community.isPopular);
+  try {
+    const response = await api.get('/api/communities/popular');
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching popular communities:", error);
+    throw new Error("Failed to fetch popular communities");
+  }
 };
 
 const fetchCommunity = async (slug: string): Promise<Community> => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 800));
-  const community = MOCK_COMMUNITIES.find(c => c.slug === slug);
-  if (!community) {
-    throw new Error(`Community with slug '${slug}' not found`);
+  try {
+    const response = await api.get(`/api/communities/slug/${slug}`);
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching community:", error);
+    throw new Error("Failed to fetch community");
   }
-  return community;
 };
 
-const fetchAllPosts = async (): Promise<Post[]> => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 800));
-  return MOCK_POSTS;
-};
-
-const fetchCommunityPosts = async (communitySlug: string): Promise<Post[]> => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 800));
-  return MOCK_POSTS.filter(post => post.communitySlug === communitySlug);
+const fetchCommunityPosts = async (communityId: string): Promise<Post[]> => {
+  try {
+    const response = await api.get(`/api/communities/${communityId}/posts`);
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching community posts:", error);
+    throw new Error("Failed to fetch community posts");
+  }
 };
 
 const fetchPost = async (postId: string): Promise<Post> => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 800));
-  const post = MOCK_POSTS.find(p => p.id === postId);
-  if (!post) {
-    throw new Error(`Post with ID '${postId}' not found`);
+  try {
+    const response = await api.get(`/api/posts/${postId}`);
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching post:", error);
+    throw new Error("Failed to fetch post");
   }
-  return post;
 };
 
 const fetchPostComments = async (postId: string): Promise<Comment[]> => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 800));
-  return MOCK_COMMENTS.filter(comment => comment.postId === postId);
+  try {
+    const response = await api.get(`/api/posts/${postId}/comments`);
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching comments:", error);
+    throw new Error("Failed to fetch comments");
+  }
 };
 
 // React Query Hooks
@@ -330,11 +184,11 @@ export const useCommunity = (slug: string) => {
   });
 };
 
-export const useCommunityPosts = (communitySlug: string) => {
+export const useCommunityPosts = (communityId: string) => {
   return useQuery({
-    queryKey: ["communityPosts", communitySlug],
-    queryFn: () => fetchCommunityPosts(communitySlug),
-    enabled: !!communitySlug,
+    queryKey: ["communityPosts", communityId],
+    queryFn: () => fetchCommunityPosts(communityId),
+    enabled: !!communityId,
     meta: {
       onError: (error: Error) => {
         toast.error(`Failed to fetch community posts: ${error.message}`);
@@ -371,163 +225,95 @@ export const usePostComments = (postId: string) => {
 
 // Mutation functions
 export const createCommunity = async (data: { name: string; description: string }) => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
-  const newCommunity: Community = {
-    id: (MOCK_COMMUNITIES.length + 1).toString(),
-    name: data.name,
-    slug: createSlug(data.name),
-    description: data.description,
-    memberCount: 1,
-    imageUrl: "",
-    createdAt: new Date().toISOString(),
-    isPopular: false
-  };
-  
-  // In a real app, this would be an API call to create the community
-  MOCK_COMMUNITIES.push(newCommunity);
-  
-  return newCommunity;
+  try {
+    const response = await api.post('/api/communities', data);
+    return response.data.data;
+  } catch (error) {
+    console.error('Error creating community:', error);
+    throw new Error('Failed to create community');
+  }
 };
 
-export const createPost = async (data: { 
-  title: string; 
-  content: string; 
-  communityId: string;
-  communityName: string;
-  communitySlug: string;
-  authorId: string;
-  authorUsername: string;
-  imageUrl?: string;
-}) => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
-  const newPost: Post = {
-    id: (MOCK_POSTS.length + 1).toString(),
-    title: data.title,
-    content: data.content,
-    authorId: data.authorId,
-    authorUsername: data.authorUsername,
-    communityId: data.communityId,
-    communityName: data.communityName,
-    communitySlug: data.communitySlug,
-    upvotes: 0,
-    downvotes: 0,
-    commentCount: 0,
-    createdAt: new Date().toISOString(),
-    imageUrl: data.imageUrl || ""
-  };
-  
-  // In a real app, this would be an API call to create the post
-  MOCK_POSTS.push(newPost);
-  
-  return newPost;
+export const createPost = async (postData: Omit<Post, 'id' | 'author' | 'createdAt' | 'upvotes' | 'downvotes' | 'commentCount'>): Promise<Post> => {
+  try {
+    const response = await api.post('/api/posts', postData);
+    return response.data.data;
+  } catch (error) {
+    console.error('Error creating post:', error);
+    throw new Error('Failed to create post');
+  }
 };
 
-export const createComment = async (data: { 
-  postId: string; 
-  content: string;
-  authorId: string;
-  authorUsername: string;
-  parentId?: string;
-}) => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
-  if (data.parentId) {
-    // This is a reply to an existing comment
-    const reply: Reply = {
-      id: Math.random().toString(36).substring(2, 15),
-      postId: data.postId,
-      parentId: data.parentId,
-      authorId: data.authorId,
-      authorUsername: data.authorUsername,
-      content: data.content,
-      upvotes: 0,
-      downvotes: 0,
-      createdAt: new Date().toISOString()
+export const updatePost = async (postId: string, postData: Partial<Post>): Promise<Post> => {
+  try {
+    const response = await api.put(`/api/posts/${postId}`, postData);
+    return response.data.data;
+  } catch (error) {
+    console.error('Error updating post:', error);
+    throw new Error('Failed to update post');
+  }
+};
+
+export const deletePost = async (postId: string): Promise<void> => {
+  try {
+    await api.delete(`/api/posts/${postId}`);
+  } catch (error) {
+    console.error('Error deleting post:', error);
+    throw new Error('Failed to delete post');
+  }
+};
+
+export const upvotePost = async (postId: string): Promise<Post> => {
+  try {
+    const response = await api.post(`/api/posts/${postId}/upvote`, {});
+    return response.data.data;
+  } catch (error) {
+    console.error('Error upvoting post:', error);
+    throw new Error('Failed to upvote post');
+  }
+};
+
+export const downvotePost = async (postId: string): Promise<Post> => {
+  try {
+    const response = await api.post(`/api/posts/${postId}/downvote`, {});
+    return response.data.data;
+  } catch (error) {
+    console.error('Error downvoting post:', error);
+    throw new Error('Failed to downvote post');
+  }
+};
+
+export const createComment = async (postId: string, content: string, parentId?: string): Promise<Comment> => {
+  try {
+    // Build the correct request body
+    const requestBody = {
+      content: content.trim()
     };
     
-    // Find the parent comment and add this reply
-    const parentComment = MOCK_COMMENTS.find(c => c.id === data.parentId);
-    if (parentComment) {
-      parentComment.replies.push(reply);
+    // Only add parentId if it exists
+    if (parentId) {
+      requestBody['parentId'] = parentId;
     }
     
-    return reply;
-  } else {
-    // This is a new top-level comment
-    const newComment: Comment = {
-      id: Math.random().toString(36).substring(2, 15),
-      postId: data.postId,
-      authorId: data.authorId,
-      authorUsername: data.authorUsername,
-      content: data.content,
-      upvotes: 0,
-      downvotes: 0,
-      createdAt: new Date().toISOString(),
-      replies: []
-    };
+    const response = await api.post(`/api/posts/${postId}/comments`, requestBody);
+    return response.data.data;
+  } catch (error: any) {
+    console.error('Error creating comment:', error);
     
-    // In a real app, this would be an API call to create the comment
-    MOCK_COMMENTS.push(newComment);
-    
-    // Update the comment count on the post
-    const post = MOCK_POSTS.find(p => p.id === data.postId);
-    if (post) {
-      post.commentCount += 1;
+    // Log more detailed error information
+    if (error.response) {
+      // The server responded with a status code outside the 2xx range
+      console.error('Server response:', error.response.data);
+      console.error('Status code:', error.response.status);
+      throw new Error(`Failed to create comment: ${error.response.data.error || 'Unknown server error'}`);
+    } else if (error.request) {
+      // The request was made but no response was received
+      console.error('No response received from server');
+      throw new Error('Server did not respond. Please check your connection and try again.');
+    } else {
+      // Something happened in setting up the request
+      console.error('Request error:', error.message);
+      throw new Error(`Request error: ${error.message}`);
     }
-    
-    return newComment;
   }
-};
-
-export const voteOnPost = async (postId: string, vote: 'up' | 'down') => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  const post = MOCK_POSTS.find(p => p.id === postId);
-  if (!post) {
-    throw new Error(`Post with ID '${postId}' not found`);
-  }
-  
-  if (vote === 'up') {
-    post.upvotes += 1;
-  } else {
-    post.downvotes += 1;
-  }
-  
-  return post;
-};
-
-export const voteOnComment = async (commentId: string, vote: 'up' | 'down') => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  const comment = MOCK_COMMENTS.find(c => c.id === commentId);
-  if (!comment) {
-    // Check if it's a reply
-    for (const parentComment of MOCK_COMMENTS) {
-      const reply = parentComment.replies.find(r => r.id === commentId);
-      if (reply) {
-        if (vote === 'up') {
-          reply.upvotes += 1;
-        } else {
-          reply.downvotes += 1;
-        }
-        return reply;
-      }
-    }
-    throw new Error(`Comment with ID '${commentId}' not found`);
-  }
-  
-  if (vote === 'up') {
-    comment.upvotes += 1;
-  } else {
-    comment.downvotes += 1;
-  }
-  
-  return comment;
 };

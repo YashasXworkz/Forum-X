@@ -1,5 +1,4 @@
-
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -7,48 +6,126 @@ import { Layout } from "@/components/layout/Layout";
 import { MessageSquare, Plus, Clock, Users, Lock } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import axios from "axios";
+import { useToast } from "@/hooks/use-toast";
+import { EmptyState } from "@/components/ui/empty-state";
+import api from "@/lib/axios";
+
+// API base URL
+const API_URL = "http://localhost:5000";
+
+interface Discussion {
+  _id: string;
+  title: string;
+  host: {
+    _id: string;
+    username: string;
+  };
+  communityName: string;
+  participantCount: number;
+  status: string;
+  isPrivate: boolean;
+  startTime: string;
+  participants: string[];
+}
 
 const Discussions = () => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [discussions, setDiscussions] = useState<Discussion[]>([]);
+  const [userDiscussions, setUserDiscussions] = useState<Discussion[]>([]);
   
-  // Mock discussion data
-  const mockDiscussions = [
-    {
-      id: "1",
-      title: "Photography Techniques Workshop",
-      host: "photoexpert",
-      communityName: "Photography",
-      participantCount: 24,
-      status: "active",
-      isPrivate: false,
-      startTime: new Date(Date.now() + 1000 * 60 * 15).toISOString(), // 15 minutes from now
-    },
-    {
-      id: "2",
-      title: "Game Development Q&A",
-      host: "devguru",
-      communityName: "Gaming",
-      participantCount: 42,
-      status: "active",
-      isPrivate: false,
-      startTime: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 minutes ago
-    },
-    {
-      id: "3",
-      title: "Book Club: Monthly Discussion",
-      host: "bookworm",
-      communityName: "Books",
-      participantCount: 18,
-      status: "scheduled",
-      isPrivate: true,
-      startTime: new Date(Date.now() + 1000 * 60 * 60 * 3).toISOString(), // 3 hours from now
-    },
-  ];
+  // Fetch discussions from API
+  useEffect(() => {
+    const fetchDiscussions = async () => {
+      setIsLoading(true);
+      try {
+        // Use the configured API instance which already has auth headers set up
+        const response = await api.get('/api/discussions');
+        
+        // Check if the response follows { success: true, data: [...] } format
+        if (response.data && response.data.data && Array.isArray(response.data.data)) {
+          setDiscussions(response.data.data);
+        } else if (Array.isArray(response.data)) {
+          // Direct array response
+          setDiscussions(response.data);
+        } else {
+          console.error("Unexpected discussions data format:", response.data);
+          toast({
+            title: "Data format error",
+            description: "Received unexpected data format from server.",
+            variant: "destructive",
+          });
+          setDiscussions([]);
+        }
+      } catch (error) {
+        console.error("Failed to fetch discussions:", error);
+        toast({
+          title: "Error",
+          description: "Failed to fetch discussions. Please try again.",
+          variant: "destructive",
+        });
+        setDiscussions([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchDiscussions();
+  }, [toast]);
   
+  // Fetch user's discussions if logged in
+  useEffect(() => {
+    if (user && token) {
+      const fetchUserDiscussions = async () => {
+        if (!user) return;
+        
+        setIsLoading(true);
+        try {
+          // Use the configured API instance which already has auth headers
+          const response = await api.get('/api/discussions/user');
+          
+          // Check if the response follows { success: true, data: [...] } format
+          if (response.data && response.data.data && Array.isArray(response.data.data)) {
+            setUserDiscussions(response.data.data);
+          } else if (Array.isArray(response.data)) {
+            // Direct array response
+            setUserDiscussions(response.data);
+          } else {
+            console.error("Unexpected user discussions data format:", response.data);
+            toast({
+              title: "Data format error",
+              description: "Received unexpected data format from server.",
+              variant: "destructive",
+            });
+            setUserDiscussions([]);
+          }
+        } catch (error) {
+          console.error("Failed to fetch user discussions:", error);
+          toast({
+            title: "Error",
+            description: "Failed to fetch your discussions. Please try again.",
+            variant: "destructive",
+          });
+          setUserDiscussions([]);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      
+      fetchUserDiscussions();
+    }
+  }, [user, token, toast]);
+  
+  // Group discussions by status
   const groupDiscussionsByStatus = () => {
+    // Ensure discussions is an array
+    const discussionsArray = Array.isArray(discussions) ? discussions : [];
+    
     return {
-      active: mockDiscussions.filter(d => d.status === 'active'),
-      scheduled: mockDiscussions.filter(d => d.status === 'scheduled'),
+      active: discussionsArray.filter(d => d.status === 'active'),
+      scheduled: discussionsArray.filter(d => d.status === 'scheduled'),
     };
   };
   
@@ -94,63 +171,85 @@ const Discussions = () => {
           </TabsList>
           
           <TabsContent value="active" className="mt-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {active.length > 0 ? (
-                active.map(discussion => (
-                  <DiscussionCard key={discussion.id} discussion={discussion} />
-                ))
-              ) : (
-                <div className="col-span-full text-center py-12">
-                  <MessageSquare className="mx-auto h-12 w-12 mb-4 opacity-50" />
-                  <h3 className="text-xl font-semibold mb-2">No active discussions</h3>
-                  <p className="text-muted-foreground mb-4">
-                    There are no active discussions at the moment.
-                  </p>
-                  {user && (
-                    <Button asChild>
-                      <Link to="/create-discussion">Start a Discussion</Link>
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
+            {isLoading ? (
+              <div className="flex justify-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {active.length > 0 ? (
+                  active.map(discussion => (
+                    <DiscussionCard key={discussion._id} discussion={discussion} />
+                  ))
+                ) : (
+                  <div className="col-span-full">
+                    <EmptyState 
+                      icon={MessageSquare}
+                      title="No active discussions"
+                      description="There are no active discussions at the moment."
+                      actionLink="/create-discussion"
+                      actionLabel="Start a Discussion"
+                      showAction={!!user}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
           </TabsContent>
           
           <TabsContent value="scheduled" className="mt-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {scheduled.length > 0 ? (
-                scheduled.map(discussion => (
-                  <DiscussionCard key={discussion.id} discussion={discussion} />
-                ))
-              ) : (
-                <div className="col-span-full text-center py-12">
-                  <Clock className="mx-auto h-12 w-12 mb-4 opacity-50" />
-                  <h3 className="text-xl font-semibold mb-2">No scheduled discussions</h3>
-                  <p className="text-muted-foreground mb-4">
-                    There are no upcoming discussions scheduled.
-                  </p>
-                  {user && (
-                    <Button asChild>
-                      <Link to="/create-discussion">Schedule a Discussion</Link>
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
+            {isLoading ? (
+              <div className="flex justify-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {scheduled.length > 0 ? (
+                  scheduled.map(discussion => (
+                    <DiscussionCard key={discussion._id} discussion={discussion} />
+                  ))
+                ) : (
+                  <div className="col-span-full">
+                    <EmptyState 
+                      icon={Clock}
+                      title="No scheduled discussions"
+                      description="There are no upcoming discussions scheduled."
+                      actionLink="/create-discussion"
+                      actionLabel="Schedule a Discussion"
+                      showAction={!!user}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
           </TabsContent>
           
           {user && (
             <TabsContent value="your" className="mt-6">
-              <div className="text-center py-12">
-                <Users className="mx-auto h-12 w-12 mb-4 opacity-50" />
-                <h3 className="text-xl font-semibold mb-2">No discussions yet</h3>
-                <p className="text-muted-foreground mb-4">
-                  You haven't created or participated in any discussions yet.
-                </p>
-                <Button asChild>
-                  <Link to="/create-discussion">Start Your First Discussion</Link>
-                </Button>
-              </div>
+              {isLoading ? (
+                <div className="flex justify-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {(Array.isArray(userDiscussions) && userDiscussions.length > 0) ? (
+                    userDiscussions.map(discussion => (
+                      <DiscussionCard key={discussion._id} discussion={discussion} isOwner={discussion.host._id === user._id} />
+                    ))
+                  ) : (
+                    <div className="col-span-full">
+                      <EmptyState 
+                        icon={Users}
+                        title="No discussions yet"
+                        description="You haven't created or participated in any discussions yet."
+                        actionLink="/create-discussion"
+                        actionLabel="Start Your First Discussion"
+                        showAction={true}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </TabsContent>
           )}
         </Tabs>
@@ -160,19 +259,11 @@ const Discussions = () => {
 };
 
 interface DiscussionCardProps {
-  discussion: {
-    id: string;
-    title: string;
-    host: string;
-    communityName: string;
-    participantCount: number;
-    status: string;
-    isPrivate: boolean;
-    startTime: string;
-  };
+  discussion: Discussion;
+  isOwner?: boolean;
 }
 
-const DiscussionCard = ({ discussion }: DiscussionCardProps) => {
+const DiscussionCard = ({ discussion, isOwner = false }: DiscussionCardProps) => {
   const startDate = new Date(discussion.startTime);
   const isLive = discussion.status === "active";
   const isPast = startDate < new Date();
@@ -199,6 +290,11 @@ const DiscussionCard = ({ discussion }: DiscussionCardProps) => {
     }
   };
   
+  const handleJoinDiscussion = async () => {
+    // Navigate to the discussion detail page
+    window.location.href = `/discussion/${discussion._id}`;
+  };
+  
   return (
     <Card className={`glass-panel overflow-hidden transition-all duration-300 ${isLive ? 'border-primary/50 shadow-[0_0_15px_rgba(59,130,246,0.1)]' : ''}`}>
       <div className={`h-2 ${isLive ? 'bg-primary animate-pulse-subtle' : 'bg-muted'}`}></div>
@@ -208,7 +304,7 @@ const DiscussionCard = ({ discussion }: DiscussionCardProps) => {
           <div className="space-y-1">
             <CardTitle className="text-lg line-clamp-1">{discussion.title}</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Hosted by <span className="font-medium">{discussion.host}</span> in r/{discussion.communityName}
+              Hosted by <span className="font-medium">{discussion.host.username}</span> in r/{discussion.communityName}
             </p>
           </div>
           
@@ -238,11 +334,14 @@ const DiscussionCard = ({ discussion }: DiscussionCardProps) => {
           <Button 
             className="w-full"
             variant={isLive ? "default" : "outline"}
-            asChild
+            onClick={handleJoinDiscussion}
           >
-            <Link to={`/discussion/${discussion.id}`}>
-              {isLive ? "Join Now" : "View Details"}
-            </Link>
+            {isLive 
+              ? "Join Now" 
+              : isOwner 
+                ? "Manage Discussion" 
+                : "View Details"
+            }
           </Button>
         </div>
       </CardContent>

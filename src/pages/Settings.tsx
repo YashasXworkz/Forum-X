@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,12 +14,32 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
-import { User, Bell, Shield, Volume, Globe, CreditCard, Download, Settings as SettingsIcon } from "lucide-react";
+import { User, Bell, Shield, Volume, Settings as SettingsIcon } from "lucide-react";
+import axios from "axios";
+
+// API base URL - update this to match your backend URL
+const API_URL = "http://localhost:5000";
 
 const Settings = () => {
-  const { user, updateUser, logout } = useAuth();
+  const { user, updateUser, logout, token } = useAuth();
   const { toast } = useToast();
+  
+  // Form state
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [bio, setBio] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Load user data
+  useEffect(() => {
+    if (user) {
+      setUsername(user.username || "");
+      setEmail(user.email || "");
+      setBio(user.bio || "");
+      setProfileImage(user.avatarUrl || null);
+    }
+  }, [user]);
 
   if (!user) {
     return (
@@ -45,12 +65,43 @@ const Settings = () => {
     }
   };
 
-  const handleSaveProfile = () => {
-    // In a real app, this would save to the backend
-    toast({
-      title: "Profile updated",
-      description: "Your profile has been updated successfully.",
-    });
+  const handleSaveProfile = async () => {
+    try {
+      setIsSubmitting(true);
+      
+      // Create updated user data
+      const userData = {
+        username,
+        email,
+        bio,
+        avatarUrl: profileImage
+      };
+      
+      // Make API call to update profile
+      const response = await axios.put(`${API_URL}/api/users/profile`, userData, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      // Update local user data
+      updateUser(response.data.data);
+      
+      toast({
+        title: "Profile updated",
+        description: "Your profile has been updated successfully.",
+      });
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || error.message || "Failed to update profile";
+      
+      toast({
+        title: "Update failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSaveNotifications = () => {
@@ -81,25 +132,50 @@ const Settings = () => {
     });
   };
 
-  const handleSaveLanguage = () => {
-    toast({
-      title: "Language preferences saved",
-      description: "Your language settings have been updated.",
-    });
+  const handleDeactivateAccount = async () => {
+    try {
+      await axios.put(`${API_URL}/api/users/deactivate`, {}, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      toast({
+        title: "Account deactivated",
+        description: "Your account has been deactivated. You can reactivate it by logging in again.",
+      });
+      
+      logout();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.response?.data?.error || "Failed to deactivate account",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleSavePayments = () => {
-    toast({
-      title: "Payment settings saved",
-      description: "Your payment information has been updated.",
-    });
-  };
-
-  const handleSaveData = () => {
-    toast({
-      title: "Data settings saved",
-      description: "Your data permissions have been updated.",
-    });
+  const handleDeleteAccount = async () => {
+    try {
+      await axios.delete(`${API_URL}/api/users/account`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      toast({
+        title: "Account deleted",
+        description: "Your account has been permanently deleted.",
+      });
+      
+      logout();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.response?.data?.error || "Failed to delete account",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -134,18 +210,6 @@ const Settings = () => {
                     <SettingsIcon className="mr-2 h-4 w-4" />
                     Room & Community
                   </TabsTrigger>
-                  <TabsTrigger value="language" className="justify-start w-full">
-                    <Globe className="mr-2 h-4 w-4" />
-                    Language & Content
-                  </TabsTrigger>
-                  <TabsTrigger value="payments" className="justify-start w-full">
-                    <CreditCard className="mr-2 h-4 w-4" />
-                    Payments & Subscriptions
-                  </TabsTrigger>
-                  <TabsTrigger value="data" className="justify-start w-full">
-                    <Download className="mr-2 h-4 w-4" />
-                    Data & Permissions
-                  </TabsTrigger>
                 </TabsList>
               </ScrollArea>
             </aside>
@@ -164,19 +228,29 @@ const Settings = () => {
                       <div className="space-y-4 flex-1">
                         <div className="space-y-2">
                           <Label htmlFor="username">Username</Label>
-                          <Input id="username" defaultValue={user.username} />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="fullName">Full Name</Label>
-                          <Input id="fullName" placeholder="Your full name" />
+                          <Input 
+                            id="username" 
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                          />
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="email">Email</Label>
-                          <Input id="email" type="email" defaultValue={user.email} />
+                          <Input 
+                            id="email" 
+                            type="email" 
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                          />
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="bio">Bio</Label>
-                          <Textarea id="bio" placeholder="Tell us a bit about yourself" />
+                          <Textarea 
+                            id="bio" 
+                            placeholder="Tell us a bit about yourself" 
+                            value={bio}
+                            onChange={(e) => setBio(e.target.value)}
+                          />
                         </div>
                       </div>
 
@@ -205,20 +279,6 @@ const Settings = () => {
                     <Separator />
                     
                     <div className="space-y-4">
-                      <h3 className="text-lg font-medium">Social Media Accounts</h3>
-                      <div className="space-y-2">
-                        <Label htmlFor="twitter">Twitter</Label>
-                        <Input id="twitter" placeholder="Your Twitter username" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="instagram">Instagram</Label>
-                        <Input id="instagram" placeholder="Your Instagram username" />
-                      </div>
-                    </div>
-
-                    <Separator />
-                    
-                    <div className="space-y-4">
                       <h3 className="text-lg font-medium text-destructive">Danger Zone</h3>
                       <div className="flex flex-col sm:flex-row gap-2">
                         <AlertDialog>
@@ -234,7 +294,7 @@ const Settings = () => {
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction>Deactivate</AlertDialogAction>
+                              <AlertDialogAction onClick={handleDeactivateAccount}>Deactivate</AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
@@ -252,7 +312,7 @@ const Settings = () => {
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction>Delete</AlertDialogAction>
+                              <AlertDialogAction onClick={handleDeleteAccount}>Delete</AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
@@ -260,7 +320,12 @@ const Settings = () => {
                     </div>
 
                     <div className="flex justify-end">
-                      <Button onClick={handleSaveProfile}>Save Changes</Button>
+                      <Button 
+                        onClick={handleSaveProfile}
+                        disabled={isSubmitting}
+                      >
+                        {isSubmitting ? "Saving..." : "Save Changes"}
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -278,8 +343,8 @@ const Settings = () => {
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
-                          <Label htmlFor="room-invites">Room Invites</Label>
-                          <p className="text-sm text-muted-foreground">Receive notifications when someone invites you to a room</p>
+                          <Label htmlFor="room-invites">Item Requests</Label>
+                          <p className="text-sm text-muted-foreground">Receive notifications when someone requests to borrow your items</p>
                         </div>
                         <Switch id="room-invites" defaultChecked />
                       </div>
@@ -288,8 +353,8 @@ const Settings = () => {
                       
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
-                          <Label htmlFor="followed-speakers">Followed Speakers Going Live</Label>
-                          <p className="text-sm text-muted-foreground">Get notified when someone you follow starts speaking</p>
+                          <Label htmlFor="followed-speakers">Request Status Updates</Label>
+                          <p className="text-sm text-muted-foreground">Get notified when the status of your requests changes</p>
                         </div>
                         <Switch id="followed-speakers" defaultChecked />
                       </div>
@@ -299,7 +364,7 @@ const Settings = () => {
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
                           <Label htmlFor="community-updates">Community Activity Updates</Label>
-                          <p className="text-sm text-muted-foreground">Get notified about activity in your communities</p>
+                          <p className="text-sm text-muted-foreground">Get notified about new items in your community</p>
                         </div>
                         <Switch id="community-updates" defaultChecked />
                       </div>
@@ -308,8 +373,8 @@ const Settings = () => {
                       
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
-                          <Label htmlFor="mentions">Mentions in Conversations</Label>
-                          <p className="text-sm text-muted-foreground">Receive notifications when you're mentioned in a conversation</p>
+                          <Label htmlFor="mentions">Messages</Label>
+                          <p className="text-sm text-muted-foreground">Receive notifications for new messages</p>
                         </div>
                         <Switch id="mentions" defaultChecked />
                       </div>
@@ -351,9 +416,9 @@ const Settings = () => {
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="space-y-4">
-                      <h3 className="text-lg font-medium">Who Can Follow You</h3>
+                      <h3 className="text-lg font-medium">Who Can Contact You</h3>
                       <div className="space-y-2">
-                        <Label htmlFor="follow-permissions">Set who can follow your account</Label>
+                        <Label htmlFor="follow-permissions">Set who can send you messages</Label>
                         <Select defaultValue="everyone">
                           <SelectTrigger id="follow-permissions">
                             <SelectValue placeholder="Select option" />
@@ -361,7 +426,7 @@ const Settings = () => {
                           <SelectContent>
                             <SelectItem value="everyone">Everyone</SelectItem>
                             <SelectItem value="verified">Verified Users Only</SelectItem>
-                            <SelectItem value="approved">Only People You Approve</SelectItem>
+                            <SelectItem value="approved">Only People You've Interacted With</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -372,7 +437,7 @@ const Settings = () => {
                     <div className="space-y-4">
                       <h3 className="text-lg font-medium">Blocked Users</h3>
                       <p className="text-sm text-muted-foreground">
-                        You haven't blocked any users yet. Blocked users won't be able to follow you or interact with your content.
+                        You haven't blocked any users yet. Blocked users won't be able to request your items or send you messages.
                       </p>
                       <Button variant="outline">Manage Blocked Users</Button>
                     </div>
@@ -380,17 +445,17 @@ const Settings = () => {
                     <Separator />
                     
                     <div className="space-y-4">
-                      <h3 className="text-lg font-medium">Room Invitations</h3>
+                      <h3 className="text-lg font-medium">Item Request Permissions</h3>
                       <div className="space-y-2">
-                        <Label htmlFor="room-invites-privacy">Who can invite you to rooms</Label>
+                        <Label htmlFor="room-invites-privacy">Who can request to borrow your items</Label>
                         <Select defaultValue="anyone">
                           <SelectTrigger id="room-invites-privacy">
                             <SelectValue placeholder="Select option" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="anyone">Anyone</SelectItem>
-                            <SelectItem value="following">People I Follow</SelectItem>
-                            <SelectItem value="none">No One</SelectItem>
+                            <SelectItem value="verified">Verified Users Only</SelectItem>
+                            <SelectItem value="none">No One (Temporarily Disable Lending)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -412,7 +477,7 @@ const Settings = () => {
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
                           <Label htmlFor="restrict-messages">Restrict Messages</Label>
-                          <p className="text-sm text-muted-foreground">Only receive messages from people you follow</p>
+                          <p className="text-sm text-muted-foreground">Only receive messages from people who have borrowed from you</p>
                         </div>
                         <Switch id="restrict-messages" />
                       </div>
@@ -530,164 +595,6 @@ const Settings = () => {
 
                     <div className="flex justify-end">
                       <Button onClick={handleSaveRoom}>Save Changes</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="language" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Language & Content Preferences</CardTitle>
-                    <CardDescription>
-                      Customize your content experience
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-medium">Language Settings</h3>
-                      <div className="space-y-2">
-                        <Label htmlFor="default-language">Set your default language</Label>
-                        <Select defaultValue="en">
-                          <SelectTrigger id="default-language">
-                            <SelectValue placeholder="Select language" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="en">English</SelectItem>
-                            <SelectItem value="es">Spanish</SelectItem>
-                            <SelectItem value="fr">French</SelectItem>
-                            <SelectItem value="de">German</SelectItem>
-                            <SelectItem value="ja">Japanese</SelectItem>
-                            <SelectItem value="ko">Korean</SelectItem>
-                            <SelectItem value="zh">Chinese</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <Separator />
-                    
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-medium">Content Preferences</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Select topics you're interested in to get better recommendations
-                      </p>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                        <Button variant="outline" className="justify-start">
-                          <span className="h-4 w-4 mr-2 rounded-full bg-primary"></span>
-                          Technology
-                        </Button>
-                        <Button variant="outline" className="justify-start">
-                          <span className="h-4 w-4 mr-2 rounded-full bg-primary"></span>
-                          Science
-                        </Button>
-                        <Button variant="outline" className="justify-start">
-                          <span className="h-4 w-4 mr-2 rounded-full bg-primary"></span>
-                          Politics
-                        </Button>
-                        <Button variant="outline" className="justify-start">
-                          <span className="h-4 w-4 mr-2 rounded-full bg-primary"></span>
-                          Sports
-                        </Button>
-                        <Button variant="outline" className="justify-start">
-                          <span className="h-4 w-4 mr-2 rounded-full bg-primary"></span>
-                          Entertainment
-                        </Button>
-                        <Button variant="outline" className="justify-start">
-                          <span className="h-4 w-4 mr-2 rounded-full bg-primary"></span>
-                          Gaming
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end">
-                      <Button onClick={handleSaveLanguage}>Save Changes</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="payments" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Payments & Subscriptions</CardTitle>
-                    <CardDescription>
-                      Manage your payment methods and subscriptions
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-medium">Active Subscriptions</h3>
-                      <p className="text-sm text-muted-foreground">
-                        You don't have any active subscriptions
-                      </p>
-                    </div>
-
-                    <Separator />
-                    
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-medium">Transaction History</h3>
-                      <p className="text-sm text-muted-foreground">
-                        View your payment history
-                      </p>
-                      <div className="border rounded-md">
-                        <div className="py-4 px-6 text-center text-muted-foreground">
-                          No transactions found
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end">
-                      <Button onClick={handleSavePayments}>Save Changes</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="data" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Data & Permissions</CardTitle>
-                    <CardDescription>
-                      Manage your data and application permissions
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-medium">Your Data</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Download a copy of your data or request data deletion
-                      </p>
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <Button variant="outline">Download Your Data</Button>
-                        <Button variant="outline" className="text-destructive">Request Data Deletion</Button>
-                      </div>
-                    </div>
-
-                    <Separator />
-                    
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <Label htmlFor="location-settings">Location Services</Label>
-                          <p className="text-sm text-muted-foreground">Allow app to access your location</p>
-                        </div>
-                        <Switch id="location-settings" />
-                      </div>
-                      
-                      <Separator />
-                      
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <Label htmlFor="third-party-access">Third-Party App Access</Label>
-                          <p className="text-sm text-muted-foreground">Control which apps can access your account</p>
-                        </div>
-                        <Button variant="outline" size="sm">Manage</Button>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end">
-                      <Button onClick={handleSaveData}>Save Changes</Button>
                     </div>
                   </CardContent>
                 </Card>

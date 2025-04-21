@@ -1,58 +1,241 @@
-
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { MessageSquare, Info, Plus } from "lucide-react";
+import { MessageSquare, Info, Plus, Users, Settings } from "lucide-react";
 import { PostCard } from "@/components/post/PostCard";
 import { CommunityHeader } from "@/components/community/CommunityHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useCommunity, useCommunityPosts } from "@/lib/api";
 import { Layout } from "@/components/layout/Layout";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
+import axios from "axios";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+// API base URL
+const API_URL = "http://localhost:5000";
+
+// Define interfaces for type safety
+interface Community {
+  _id: string;
+  name: string;
+  slug: string;
+  description: string;
+  memberCount: number;
+  category: string;
+  imageUrl?: string;
+  isPrivate: boolean;
+  createdAt: string;
+  creator?: string;
+  members?: string[];
+}
+
+interface Post {
+  _id: string;
+  title: string;
+  content: string;
+  author?: {
+    _id: string;
+    username: string;
+    avatarUrl?: string;
+  };
+  communityId: string;
+  createdAt: string;
+  upvotes: number;
+  downvotes: number;
+  commentCount: number;
+}
+
+// Make sure the CommunityHeader component expects our Community interface
+interface CommunityHeaderProps {
+  community: Community;
+  isJoined: boolean;
+  onJoin: () => void;
+  onLeave: () => void;
+}
 
 const Community = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
+  const { toast } = useToast();
   
-  const { 
-    data: community, 
-    isLoading: isLoadingCommunity,
-    error: communityError
-  } = useCommunity(slug || "");
+  const [community, setCommunity] = useState<Community | null>(null);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [isLoadingCommunity, setIsLoadingCommunity] = useState(true);
+  const [isLoadingPosts, setIsLoadingPosts] = useState(true);
+  const [isJoined, setIsJoined] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
   
-  const {
-    data: posts = [],
-    isLoading: isLoadingPosts
-  } = useCommunityPosts(community?.id || "");
+  // Fetch community data
+  useEffect(() => {
+    const fetchCommunity = async () => {
+      try {
+        setIsLoadingCommunity(true);
+        
+        // Get community by slug
+        const response = await axios.get(`${API_URL}/api/communities/slug/${slug}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        
+        const communityData = response.data.data;
+        setCommunity(communityData);
+        
+        // Check if user is owner
+        setIsOwner(communityData.creator === user?._id);
+        
+        // Check if user is a member
+        if (user && communityData.members) {
+          setIsJoined(communityData.members.includes(user._id));
+        }
+        
+        setIsLoadingCommunity(false);
+      } catch (error) {
+        console.error("Error fetching community:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load community data. Please try again later.",
+          variant: "destructive"
+        });
+        navigate("/communities");
+      }
+    };
+    
+    if (slug) {
+      fetchCommunity();
+    }
+  }, [slug, token, user, navigate, toast]);
   
-  if (communityError) {
-    navigate("/not-found", { replace: true });
-    return null;
-  }
+  // Fetch community posts
+  useEffect(() => {
+    const fetchPosts = async () => {
+      if (!community) return;
+      
+      try {
+        setIsLoadingPosts(true);
+        
+        const response = await axios.get(`${API_URL}/api/communities/${community._id}/posts`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        
+        setPosts(response.data.data);
+        setIsLoadingPosts(false);
+      } catch (error) {
+        console.error("Error fetching community posts:", error);
+        setPosts([]);
+        setIsLoadingPosts(false);
+      }
+    };
+    
+    if (community) {
+      fetchPosts();
+    }
+  }, [community, token]);
   
+  const handleJoinCommunity = async () => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "You need to be logged in to join this community",
+        variant: "destructive"
+      });
+      navigate("/login");
+      return;
+    }
+    
+    try {
+      await axios.post(`${API_URL}/api/communities/${community?._id}/join`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setIsJoined(true);
+      
+      toast({
+        title: "Success",
+        description: `You've joined ${community?.name}!`
+      });
+      
+      // Update community member count
+      setCommunity(prev => prev ? {
+        ...prev,
+        memberCount: prev.memberCount + 1
+      } : null);
+      
+    } catch (error) {
+      console.error("Error joining community:", error);
+      toast({
+        title: "Error",
+        description: "Failed to join community. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+  
+  const handleLeaveCommunity = async () => {
+    try {
+      await axios.post(`${API_URL}/api/communities/${community?._id}/leave`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setIsJoined(false);
+      
+      toast({
+        title: "Success",
+        description: `You've left ${community?.name}`
+      });
+      
+      // Update community member count
+      setCommunity(prev => prev ? {
+        ...prev,
+        memberCount: Math.max(0, prev.memberCount - 1)
+      } : null);
+      
+    } catch (error) {
+      console.error("Error leaving community:", error);
+      toast({
+        title: "Error",
+        description: "Failed to leave community. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
   if (isLoadingCommunity) {
     return (
       <Layout>
-        <div className="space-y-6 animate-pulse">
-          <div className="h-64 bg-muted rounded-lg"></div>
-          <div className="h-12 w-48 bg-muted rounded"></div>
-          <div className="h-96 bg-muted rounded-lg"></div>
+        <div className="flex justify-center items-center py-20">
+          <Loader2 className="h-10 w-10 animate-spin text-primary/70" />
         </div>
       </Layout>
     );
   }
 
   if (!community) {
-    return null;
+    return (
+      <Layout>
+        <EmptyState
+          icon={Users}
+          title="Community not found"
+          description="The community you're looking for doesn't exist or has been removed."
+          actionLink="/communities"
+          actionLabel="Browse Communities"
+        />
+      </Layout>
+    );
   }
 
   return (
     <Layout>
       <div className="space-y-6 animate-fade-in">
-        <CommunityHeader community={community} />
+        <CommunityHeader 
+          community={community} 
+          isJoined={isJoined}
+          onJoin={handleJoinCommunity}
+          onLeave={handleLeaveCommunity}
+        />
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-2">
@@ -71,12 +254,14 @@ const Community = () => {
                 </TabsList>
               </Tabs>
               
-              <Button asChild>
-                <Link to={`/create-post?community=${community.id}`} className="flex items-center">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Post
-                </Link>
-              </Button>
+              {user && (
+                <Button asChild>
+                  <Link to={`/create-post?community=${community._id}`} className="flex items-center">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Post
+                  </Link>
+                </Button>
+              )}
             </div>
             
             <TabsContent value="posts" className="space-y-4">
@@ -86,19 +271,18 @@ const Community = () => {
                   <div key={index} className="h-64 bg-muted rounded-lg animate-pulse"></div>
                 ))
               ) : posts.length > 0 ? (
-                posts.map((post: any) => (
-                  <PostCard key={post.id} post={post} />
+                posts.map(post => (
+                  <PostCard key={post._id} post={post} />
                 ))
               ) : (
-                <Card>
-                  <CardContent className="py-12 text-center">
-                    <h3 className="text-xl font-semibold mb-2">No posts yet</h3>
-                    <p className="text-muted-foreground mb-4">Be the first to create a post in this community!</p>
-                    <Button asChild>
-                      <Link to={`/create-post?community=${community.id}`}>Create Post</Link>
-                    </Button>
-                  </CardContent>
-                </Card>
+                <EmptyState
+                  icon={MessageSquare}
+                  title="No posts yet"
+                  description="Be the first to create a post in this community!"
+                  actionLink={`/create-post?community=${community._id}`}
+                  actionLabel="Create Post"
+                  showAction={!!user}
+                />
               )}
             </TabsContent>
             
@@ -112,7 +296,7 @@ const Community = () => {
                   </p>
                   {user && (
                     <Button variant="outline" asChild>
-                      <Link to={`/create-discussion?community=${community.id}`}>Start Discussion</Link>
+                      <Link to={`/create-discussion?community=${community._id}`}>Start Discussion</Link>
                     </Button>
                   )}
                 </CardContent>
@@ -142,8 +326,8 @@ const Community = () => {
                         <dd className="font-medium">{posts.length}</dd>
                       </div>
                       <div>
-                        <dt className="text-sm text-muted-foreground">Discussions</dt>
-                        <dd className="font-medium">0</dd>
+                        <dt className="text-sm text-muted-foreground">Category</dt>
+                        <dd className="font-medium">{community.category}</dd>
                       </div>
                     </dl>
                   </div>
@@ -153,48 +337,34 @@ const Community = () => {
           </div>
           
           <div className="space-y-6">
-            <Card className="glass-panel">
-              <CardHeader className="bg-primary/5 pb-2">
-                <CardTitle className="text-lg">Community Rules</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <ol className="list-decimal list-inside space-y-2">
-                  <li>Be respectful and civil</li>
-                  <li>No hate speech or harassment</li>
-                  <li>No spam or self-promotion</li>
-                  <li>Use descriptive titles for posts</li>
-                  <li>Properly tag sensitive content</li>
-                </ol>
-              </CardContent>
-            </Card>
-            
-            <Card className="glass-panel">
-              <CardHeader className="bg-primary/5 pb-2">
-                <CardTitle className="text-lg">Moderators</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="text-xs font-semibold">A</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">admin_user</p>
-                      <p className="text-xs text-muted-foreground">Creator</p>
+            <Card className="overflow-hidden">
+              <CardContent className="py-6">
+                <h3 className="font-semibold mb-4 flex items-center">
+                  <Users className="mr-2 h-4 w-4" />
+                  Community Rules
+                </h3>
+                
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <div className="font-medium">1. Be respectful</div>
+                    <div className="text-muted-foreground">
+                      Treat others with respect. No hate speech or harassment.
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="text-xs font-semibold">M</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">mod_helper</p>
-                      <p className="text-xs text-muted-foreground">Moderator</p>
+                  
+                  <div>
+                    <div className="font-medium">2. Stay on topic</div>
+                    <div className="text-muted-foreground">
+                      Posts should be relevant to {community.name}.
                     </div>
                   </div>
-                  <Button variant="outline" size="sm" className="w-full">
-                    View All Moderators
-                  </Button>
+                  
+                  <div>
+                    <div className="font-medium">3. No spam</div>
+                    <div className="text-muted-foreground">
+                      Don't spam or self-promote without contributing.
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>

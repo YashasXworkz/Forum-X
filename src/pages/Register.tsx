@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -6,6 +5,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
+import { AlertCircle } from "lucide-react";
 
 const Register = () => {
   const [username, setUsername] = useState("");
@@ -14,16 +14,67 @@ const Register = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [formErrors, setFormErrors] = useState<{
+    username?: string;
+    email?: string;
+    password?: string;
+    confirmPassword?: string;
+  }>({});
   
   const { register } = useAuth();
   const navigate = useNavigate();
+
+  const validateForm = () => {
+    const errors: {
+      username?: string;
+      email?: string;
+      password?: string;
+      confirmPassword?: string;
+    } = {};
+    let isValid = true;
+
+    // Username validation
+    if (!username) {
+      errors.username = "Username is required";
+      isValid = false;
+    } else if (username.length < 3) {
+      errors.username = "Username must be at least 3 characters";
+      isValid = false;
+    }
+
+    // Email validation
+    if (!email) {
+      errors.email = "Email is required";
+      isValid = false;
+    } else if (!/\S+@\S+\.\S+/.test(email)) {
+      errors.email = "Email address is invalid";
+      isValid = false;
+    }
+
+    // Password validation
+    if (!password) {
+      errors.password = "Password is required";
+      isValid = false;
+    } else if (password.length < 6) {
+      errors.password = "Password must be at least 6 characters";
+      isValid = false;
+    }
+
+    // Confirm password validation
+    if (password !== confirmPassword) {
+      errors.confirmPassword = "Passwords do not match";
+      isValid = false;
+    }
+
+    setFormErrors(errors);
+    return isValid;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
+    if (!validateForm()) {
       return;
     }
     
@@ -52,8 +103,9 @@ const Register = () => {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
-                <div className="p-3 text-sm bg-destructive/10 text-destructive rounded-md">
-                  {error}
+                <div className="p-3 text-sm bg-destructive/10 text-destructive rounded-md flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <span>{error}</span>
                 </div>
               )}
               
@@ -65,8 +117,11 @@ const Register = () => {
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="johnsmith"
                   required
-                  className="w-full"
+                  className={`w-full ${formErrors.username ? 'border-destructive' : ''}`}
                 />
+                {formErrors.username && (
+                  <p className="text-xs text-destructive mt-1">{formErrors.username}</p>
+                )}
               </div>
               
               <div className="space-y-2">
@@ -78,8 +133,11 @@ const Register = () => {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
                   required
-                  className="w-full"
+                  className={`w-full ${formErrors.email ? 'border-destructive' : ''}`}
                 />
+                {formErrors.email && (
+                  <p className="text-xs text-destructive mt-1">{formErrors.email}</p>
+                )}
               </div>
               
               <div className="space-y-2">
@@ -91,8 +149,11 @@ const Register = () => {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="w-full"
+                  className={`w-full ${formErrors.password ? 'border-destructive' : ''}`}
                 />
+                {formErrors.password && (
+                  <p className="text-xs text-destructive mt-1">{formErrors.password}</p>
+                )}
               </div>
               
               <div className="space-y-2">
@@ -104,8 +165,11 @@ const Register = () => {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="w-full"
+                  className={`w-full ${formErrors.confirmPassword ? 'border-destructive' : ''}`}
                 />
+                {formErrors.confirmPassword && (
+                  <p className="text-xs text-destructive mt-1">{formErrors.confirmPassword}</p>
+                )}
               </div>
               
               <Button type="submit" className="w-full" disabled={isSubmitting}>
