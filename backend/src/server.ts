@@ -9,13 +9,13 @@ import { connectDB } from './config/database';
 import { errorHandler } from './utils';
 import routes from './routes';
 import jwt from 'jsonwebtoken';
-import { JwtPayload } from './utils/jwt';
+import { JwtPayload, verifyToken } from './utils/jwt';
 import DiscussionMessage from './models/DiscussionMessage';
 import mongoose from 'mongoose';
 import setupAudioHandler from './socket/audioHandler';
+import path from 'path';
 
-// Load environment variables
-dotenv.config();
+// Note: Environment variables are already loaded in database.ts and jwt.ts
 
 // Connect to database
 connectDB();
@@ -61,6 +61,9 @@ app.use(cors({
   credentials: true
 }));
 
+// Serve static files from the uploads directory
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
 // Logger
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
@@ -98,8 +101,12 @@ io.use((socket: Socket, next: (err?: Error) => void) => {
       return next(new Error('Authentication error: No token provided'));
     }
     
-    // Verify token
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    // Verify token using our shared verification function
+    const decoded = verifyToken(token);
+    if (!decoded) {
+      console.error('Socket auth: Token verification failed');
+      return next(new Error('Authentication error: Invalid token'));
+    }
     
     // Initialize user data object if it doesn't exist
     if (!socket.data) {

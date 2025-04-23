@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { MessageSquare, Users, ArrowLeft, Clock, Send, X, Mic, MicOff } from "lucide-react";
+import { MessageSquare, Users, ArrowLeft, Clock, Send, X, Mic, MicOff, Video } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useSocket, ChatMessage, UserTyping } from "@/lib/socket";
@@ -13,7 +13,7 @@ import api, { API_URL } from "@/lib/axios";
 import { format } from "date-fns";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import AudioChat from "@/components/discussion/AudioChat";
+import VideoConference from "@/components/discussion/VideoConference";
 
 interface DiscussionDetail {
   _id: string;
@@ -68,7 +68,7 @@ const Discussion = () => {
   const [newMessage, setNewMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [usersTyping, setUsersTyping] = useState<UserTyping[]>([]);
-  const [activeTab, setActiveTab] = useState<"text" | "voice">("text");
+  const [activeTab, setActiveTab] = useState<"text" | "video">("text");
   
   // Get socket context
   const { 
@@ -492,15 +492,15 @@ const Discussion = () => {
             </div>
           </div>
           
-          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "text" | "voice")} className="flex-1 flex flex-col">
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "text" | "video")} className="flex-1 flex flex-col">
             <TabsList className="mb-4">
               <TabsTrigger value="text" className="flex items-center">
                 <MessageSquare className="mr-2 h-4 w-4" />
                 Text Chat
               </TabsTrigger>
-              <TabsTrigger value="voice" className="flex items-center">
-                <Mic className="mr-2 h-4 w-4" />
-                Voice Chat
+              <TabsTrigger value="video" className="flex items-center">
+                <Video className="mr-2 h-4 w-4" />
+                Video Conference
               </TabsTrigger>
             </TabsList>
             
@@ -604,8 +604,8 @@ const Discussion = () => {
               </Card>
             </TabsContent>
             
-            <TabsContent value="voice" className="flex-1 data-[state=inactive]:hidden">
-              <AudioChat discussionId={discussionId || ''} />
+            <TabsContent value="video" className="flex-1 data-[state=inactive]:hidden">
+              <VideoConference discussionId={discussionId || ''} />
             </TabsContent>
           </Tabs>
         </div>

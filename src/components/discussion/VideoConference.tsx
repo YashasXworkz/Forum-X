@@ -1,10 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/auth';
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Camera, CameraOff } from 'lucide-react';
+import { Card } from '@/components/ui/card';
 
 // Types
-interface AudioChatProps {
+interface VideoConferenceProps {
   discussionId: string;
 }
 
@@ -14,7 +15,7 @@ declare global {
   }
 }
 
-const AudioChat: React.FC<AudioChatProps> = ({ discussionId }) => {
+const VideoConference: React.FC<VideoConferenceProps> = ({ discussionId }) => {
   const { user } = useAuth();
   const containerRef = useRef<HTMLDivElement>(null);
   
@@ -36,11 +37,53 @@ const AudioChat: React.FC<AudioChatProps> = ({ discussionId }) => {
       });
     };
 
+    // Style tweaks for ZegoCloud UI
+    const addCustomStyles = () => {
+      const styleEl = document.createElement('style');
+      styleEl.id = 'zego-custom-styles';
+      styleEl.textContent = `
+        :root {
+          --zego-primary-color: var(--primary);
+          --zego-sidebar-bg-color: var(--background);
+          --zego-border-color: var(--border);
+          --zego-foreground-color: var(--foreground);
+          --zego-button-primary-color: var(--primary);
+          --zego-button-text-color: var(--primary-foreground);
+        }
+        
+        .ZegoRoomContainer {
+          border-radius: 0.5rem;
+          overflow: hidden;
+          background-color: var(--background);
+          color: var(--foreground);
+        }
+        
+        .ZegoRoom_container {
+          background-color: hsl(var(--card) / 0.8);
+        }
+        
+        .ZegoButton_button {
+          border-radius: 0.375rem;
+        }
+      `;
+      document.head.appendChild(styleEl);
+      
+      return () => {
+        const styleElement = document.getElementById('zego-custom-styles');
+        if (styleElement) {
+          styleElement.remove();
+        }
+      };
+    };
+
     const initializeZegoCloud = async () => {
       try {
         await loadZegoScript();
         
         if (!containerRef.current || !window.ZegoUIKitPrebuilt) return;
+        
+        // Add custom styles before initializing
+        const removeStyles = addCustomStyles();
         
         const roomID = discussionId;
         const userID = user?._id || Math.floor(Math.random() * 10000).toString();
@@ -78,6 +121,13 @@ const AudioChat: React.FC<AudioChatProps> = ({ discussionId }) => {
           maxUsers: 50,
           layout: "Grid",
           showLayoutButton: true,
+          branding: {
+            logoURL: "",
+          },
+          onLeaveRoom: () => {
+            // Clean up
+            removeStyles();
+          },
         });
       } catch (error) {
         console.error("Error initializing ZegoCloud:", error);
@@ -92,33 +142,25 @@ const AudioChat: React.FC<AudioChatProps> = ({ discussionId }) => {
       if (zegoScript) {
         zegoScript.remove();
       }
+      
+      const styleElement = document.getElementById('zego-custom-styles');
+      if (styleElement) {
+        styleElement.remove();
+      }
     };
   }, [discussionId, user]);
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex justify-between items-center mb-4 p-2 bg-secondary/30 rounded-md">
-        <div className="flex items-center">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="mr-2" 
-            onClick={() => window.history.back()}
-          >
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Back
-          </Button>
-          <span className="font-medium">Video Conference</span>
-        </div>
+    <Card className="flex flex-col h-full border-0 shadow-none overflow-hidden">
+      <div className="flex-1 rounded-md overflow-hidden">
+        <div 
+          ref={containerRef}
+          className="w-full h-full rounded-md overflow-hidden"
+          style={{ minHeight: '450px' }}
+        />
       </div>
-      
-      <div 
-        ref={containerRef}
-        className="flex-1 w-full h-full rounded-md overflow-hidden"
-        style={{ minHeight: '400px' }}
-      />
-    </div>
+    </Card>
   );
 };
 
-export default AudioChat;
+export default VideoConference; 

@@ -121,10 +121,11 @@ const CreatePost = () => {
       const formData = new FormData();
       formData.append('image', file);
       
+      console.log('Uploading file:', file.name, file.type, file.size);
+      
       const response = await api.post('/api/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+        // Don't set Content-Type header manually for FormData
+        // The browser will set it with the correct boundary
       });
       
       setImageUrl(response.data.data.imageUrl);

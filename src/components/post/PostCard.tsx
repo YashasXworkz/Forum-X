@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -10,12 +10,14 @@ import {
   Share, 
   MoreHorizontal,
   Pencil,
-  Trash
+  Trash,
+  Check,
+  Copy
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
-import { deletePost } from "@/lib/api";
+import { deletePost, upvotePost, downvotePost } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   DropdownMenu,
@@ -23,6 +25,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 interface PostCardProps {
   post: {
@@ -49,13 +61,27 @@ export const PostCard = ({ post, onPostDeleted }: PostCardProps) => {
   const navigate = useNavigate();
   const [isDeleting, setIsDeleting] = useState(false);
   const queryClient = useQueryClient();
+  const [score, setScore] = useState(post.upvotes - post.downvotes);
+  const [userVote, setUserVote] = useState<'up' | 'down' | null>(null);
+  const [isSharing, setIsSharing] = useState(false);
+  const [copied, setCopied] = useState(false);
   
-  const score = post.upvotes - post.downvotes;
   const authorName = post.author?.username || "Anonymous";
   const authorInitial = authorName[0].toUpperCase();
   
   // Check if the current user is the post author
   const isAuthor = user && post.author && user._id === post.author._id;
+  
+  // Get user's previous vote from localStorage if available
+  useEffect(() => {
+    if (user) {
+      const voteKey = `post_vote_${post._id}_${user._id}`;
+      const savedVote = localStorage.getItem(voteKey);
+      if (savedVote) {
+        setUserVote(savedVote as 'up' | 'down');
+      }
+    }
+  }, [post._id, user]);
   
   const handleEdit = () => {
     navigate(`/edit-post/${post._id}`);
@@ -90,6 +116,103 @@ export const PostCard = ({ post, onPostDeleted }: PostCardProps) => {
       toast.error("Failed to delete post. Please try again.");
     } finally {
       setIsDeleting(false);
+    }
+  };
+  
+  const handleVote = async (direction: 'up' | 'down') => {
+    if (!user) {
+      toast.error("Please sign in to vote");
+      return;
+    }
+    
+    // Check if user is trying to vote the same way
+    if (userVote === direction) {
+      // Remove the vote (toggle off)
+      setUserVote(null);
+      setScore(direction === 'up' ? score - 1 : score + 1);
+      
+      // Remove from localStorage
+      if (user) {
+        const voteKey = `post_vote_${post._id}_${user._id}`;
+        localStorage.removeItem(voteKey);
+      }
+      return;
+    }
+    
+    try {
+      // Optimistic update
+      let scoreChange = 0;
+      
+      if (userVote === null) {
+        // New vote
+        scoreChange = direction === 'up' ? 1 : -1;
+      } else {
+        // Changing vote
+        scoreChange = direction === 'up' ? 2 : -2;
+      }
+      
+      setScore(score + scoreChange);
+      setUserVote(direction);
+      
+      // Save to localStorage
+      if (user) {
+        const voteKey = `post_vote_${post._id}_${user._id}`;
+        localStorage.setItem(voteKey, direction);
+      }
+      
+      // Send to server
+      const response = direction === 'up' 
+        ? await upvotePost(post._id) 
+        : await downvotePost(post._id);
+      
+      // Update from server response if needed
+      const serverScore = response.upvotes - response.downvotes;
+      if (serverScore !== score + scoreChange) {
+        setScore(serverScore);
+      }
+      
+      // Invalidate query to update other instances
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+      queryClient.invalidateQueries({ queryKey: ['post', post._id] });
+      
+    } catch (error) {
+      console.error(`Error ${direction}voting post:`, error);
+      toast.error(`Failed to ${direction}vote post. Please try again.`);
+      
+      // Revert optimistic update
+      setUserVote(userVote);
+      setScore(post.upvotes - post.downvotes);
+    }
+  };
+  
+  const handleCopyLink = () => {
+    const postUrl = `${window.location.origin}/post/${post._id}`;
+    navigator.clipboard.writeText(postUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast.success("Link copied to clipboard");
+    });
+  };
+  
+  const handleShare = async () => {
+    const postUrl = `${window.location.origin}/post/${post._id}`;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: post.title,
+          text: `Check out this post: ${post.title}`,
+          url: postUrl
+        });
+        toast.success("Post shared successfully");
+      } catch (error) {
+        console.error("Error sharing:", error);
+        // Fall back to dialog if sharing fails
+        setIsSharing(true);
+      }
+    } else {
+      // If Web Share API is not supported, show the share dialog
+      setIsSharing(true);
     }
   };
   
@@ -173,11 +296,21 @@ export const PostCard = ({ post, onPostDeleted }: PostCardProps) => {
       <CardFooter className="px-4 py-2 bg-muted/30 flex justify-between text-sm">
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-1">
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className={`h-8 w-8 ${userVote === 'up' ? 'text-primary bg-primary/10' : ''}`}
+              onClick={() => handleVote('up')}
+            >
               <ThumbsUp className="h-4 w-4" />
             </Button>
             <span className="font-medium">{score}</span>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className={`h-8 w-8 ${userVote === 'down' ? 'text-destructive bg-destructive/10' : ''}`}
+              onClick={() => handleVote('down')}
+            >
               <ThumbsDown className="h-4 w-4" />
             </Button>
           </div>
@@ -191,10 +324,74 @@ export const PostCard = ({ post, onPostDeleted }: PostCardProps) => {
           </Link>
         </div>
         
-        <Button variant="ghost" size="sm" className="h-8 px-2">
-          <Share className="h-4 w-4 mr-1" />
-          Share
-        </Button>
+        <Dialog open={isSharing} onOpenChange={setIsSharing}>
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-8 px-2" onClick={handleShare}>
+              <Share className="h-4 w-4 mr-1" />
+              Share
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Share this post</DialogTitle>
+              <DialogDescription>
+                Copy the link below or share directly to your favorite platform
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex items-center space-x-2 mt-4">
+              <Input 
+                value={`${window.location.origin}/post/${post._id}`}
+                readOnly
+                className="flex-1"
+              />
+              <Button size="sm" onClick={handleCopyLink}>
+                {copied ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+                {copied ? "Copied" : "Copy"}
+              </Button>
+            </div>
+            <div className="flex gap-2 mt-4 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  window.open(`https://twitter.com/intent/tweet?url=${encodeURIComponent(`${window.location.origin}/post/${post._id}`)}&text=${encodeURIComponent(`Check out this post: ${post.title}`)}`, '_blank');
+                }}
+              >
+                Twitter
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${window.location.origin}/post/${post._id}`)}`, '_blank');
+                }}
+              >
+                Facebook
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(`${window.location.origin}/post/${post._id}`)}`, '_blank');
+                }}
+              >
+                LinkedIn
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  window.open(`mailto:?subject=${encodeURIComponent(`Check out this post: ${post.title}`)}&body=${encodeURIComponent(`I thought you might be interested in this post:\n\n${post.title}\n\n${window.location.origin}/post/${post._id}`)}`, '_blank');
+                }}
+              >
+                Email
+              </Button>
+            </div>
+            <DialogClose asChild>
+              <Button variant="secondary" className="mt-4">Close</Button>
+            </DialogClose>
+          </DialogContent>
+        </Dialog>
       </CardFooter>
     </Card>
   );
