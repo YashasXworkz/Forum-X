@@ -114,11 +114,77 @@ const fetchPost = async (postId: string): Promise<Post> => {
 const fetchPostComments = async (postId: string): Promise<Comment[]> => {
   try {
     const response = await api.get(`/api/posts/${postId}/comments`);
-    return response.data.data;
+    const comments = response.data.data;
+    
+    // Build a properly nested comment structure
+    return buildNestedCommentStructure(comments);
   } catch (error) {
     console.error("Error fetching comments:", error);
     throw new Error("Failed to fetch comments");
   }
+};
+
+// Helper function to build a properly nested comment tree structure
+const buildNestedCommentStructure = (comments: any[]): Comment[] => {
+  if (!comments || !Array.isArray(comments)) {
+    console.error("Invalid comments data received:", comments);
+    return [];
+  }
+  
+  console.log('Raw comments from API:', comments);
+  
+  // Create a map of comments by ID for quick lookup
+  const commentMap = new Map();
+  comments.forEach(comment => {
+    // Make a copy with empty replies array if not already present
+    commentMap.set(comment.id, {
+      ...comment,
+      replies: comment.replies || []
+    });
+  });
+  
+  // Create the tree structure - top level comments and their replies
+  const rootComments: Comment[] = [];
+  const processedIds = new Set();
+  
+  // First pass: organize comments that already have a "replies" array
+  comments.forEach(comment => {
+    if (!comment.parentId && commentMap.has(comment.id)) {
+      const commentWithReplies = commentMap.get(comment.id);
+      rootComments.push(commentWithReplies);
+      processedIds.add(comment.id);
+    }
+  });
+  
+  // Second pass: organize comments that need to be added to parent's replies
+  comments.forEach(comment => {
+    if (comment.parentId && !processedIds.has(comment.id)) {
+      const commentWithReplies = commentMap.get(comment.id);
+      const parent = commentMap.get(comment.parentId);
+      
+      if (parent) {
+        // Check if this reply already exists in the parent's replies array
+        const replyExists = parent.replies.some((reply: any) => reply.id === comment.id);
+        
+        if (!replyExists) {
+          parent.replies.push(commentWithReplies);
+        }
+        processedIds.add(comment.id);
+      } else {
+        console.warn(`Parent comment ${comment.parentId} not found for comment ${comment.id}`);
+        // If parent not found, add as a top-level comment
+        rootComments.push(commentWithReplies);
+        processedIds.add(comment.id);
+      }
+    } else if (!comment.parentId && !processedIds.has(comment.id)) {
+      // This is a top-level comment that wasn't processed in the first pass
+      rootComments.push(commentMap.get(comment.id));
+      processedIds.add(comment.id);
+    }
+  });
+  
+  console.log('Structured comments tree:', rootComments);
+  return rootComments;
 };
 
 // React Query Hooks
@@ -215,6 +281,9 @@ export const usePostComments = (postId: string) => {
     queryKey: ["postComments", postId],
     queryFn: () => fetchPostComments(postId),
     enabled: !!postId,
+    staleTime: 5000,
+    refetchInterval: false,
+    refetchOnWindowFocus: true,
     meta: {
       onError: (error: Error) => {
         toast.error(`Failed to fetch comments: ${error.message}`);

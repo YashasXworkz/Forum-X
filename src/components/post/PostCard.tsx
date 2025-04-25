@@ -18,6 +18,7 @@ import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { deletePost, upvotePost, downvotePost } from "@/lib/api";
+import api from "@/lib/axios";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   DropdownMenu,
@@ -65,6 +66,7 @@ export const PostCard = ({ post, onPostDeleted }: PostCardProps) => {
   const [userVote, setUserVote] = useState<'up' | 'down' | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isVoting, setIsVoting] = useState(false);
   
   const authorName = post.author?.username || "Anonymous";
   const authorInitial = authorName[0].toUpperCase();
@@ -120,68 +122,119 @@ export const PostCard = ({ post, onPostDeleted }: PostCardProps) => {
   };
   
   const handleVote = async (direction: 'up' | 'down') => {
+    // Prevent voting if already processing a vote
+    if (isVoting) return;
+    
     if (!user) {
       toast.error("Please sign in to vote");
       return;
     }
     
-    // Check if user is trying to vote the same way
-    if (userVote === direction) {
-      // Remove the vote (toggle off)
-      setUserVote(null);
-      setScore(direction === 'up' ? score - 1 : score + 1);
-      
-      // Remove from localStorage
-      if (user) {
-        const voteKey = `post_vote_${post._id}_${user._id}`;
-        localStorage.removeItem(voteKey);
-      }
+    // Prevent users from voting on their own posts
+    if (isAuthor) {
+      toast.error("You cannot vote on your own posts");
       return;
     }
     
+    // Add a flag to prevent double-clicks
+    setIsVoting(true);
+    
     try {
-      // Optimistic update
-      let scoreChange = 0;
+      const voteKey = `post_vote_${post._id}_${user._id}`;
+      const storedVote = localStorage.getItem(voteKey);
       
-      if (userVote === null) {
-        // New vote
-        scoreChange = direction === 'up' ? 1 : -1;
-      } else {
-        // Changing vote
-        scoreChange = direction === 'up' ? 2 : -2;
+      // Case 1: Clicking the same button again (toggle off)
+      if (storedVote === direction) {
+        // Remove vote
+        localStorage.removeItem(voteKey);
+        
+        // Call API to remove vote - note: this endpoint might not exist
+        // We'll use the opposite vote to simulate removing
+        try {
+          if (direction === 'up') {
+            await downvotePost(post._id);
+          } else {
+            await upvotePost(post._id);
+          }
+          
+          // Then call the opposite again to get back to neutral
+          if (direction === 'up') {
+            await downvotePost(post._id);
+          } else {
+            await upvotePost(post._id);
+          }
+        } catch (err) {
+          console.error("Error removing vote:", err);
+        }
+        
+        // Update local state
+        setUserVote(null);
+        
+        // Fetch fresh post data using the existing API
+        try {
+          const response = await api.get(`/api/posts/${post._id}`);
+          const freshPost = response.data.data;
+          setScore(freshPost.upvotes - freshPost.downvotes);
+        } catch (err) {
+          console.error("Error fetching updated post:", err);
+        }
+        
+        // Update global state
+        queryClient.invalidateQueries({ queryKey: ['posts'] });
+        return;
       }
       
-      setScore(score + scoreChange);
+      // Case 2: First vote or changing vote direction
+      if (direction === 'up') {
+        // If changing from down to up, we need to cancel the down first
+        if (storedVote === 'down') {
+          await downvotePost(post._id); // Cancel the down vote
+        }
+        await upvotePost(post._id);
+      } else {
+        // If changing from up to down, we need to cancel the up first
+        if (storedVote === 'up') {
+          await upvotePost(post._id); // Cancel the up vote
+        }
+        await downvotePost(post._id);
+      }
+      
+      // Store the new vote
+      localStorage.setItem(voteKey, direction);
+      
+      // Update local state
       setUserVote(direction);
       
-      // Save to localStorage
-      if (user) {
-        const voteKey = `post_vote_${post._id}_${user._id}`;
-        localStorage.setItem(voteKey, direction);
+      // Fetch fresh post data
+      try {
+        const response = await api.get(`/api/posts/${post._id}`);
+        const freshPost = response.data.data;
+        setScore(freshPost.upvotes - freshPost.downvotes);
+      } catch (err) {
+        console.error("Error fetching updated post:", err);
       }
       
-      // Send to server
-      const response = direction === 'up' 
-        ? await upvotePost(post._id) 
-        : await downvotePost(post._id);
-      
-      // Update from server response if needed
-      const serverScore = response.upvotes - response.downvotes;
-      if (serverScore !== score + scoreChange) {
-        setScore(serverScore);
-      }
-      
-      // Invalidate query to update other instances
+      // Update global state
       queryClient.invalidateQueries({ queryKey: ['posts'] });
-      queryClient.invalidateQueries({ queryKey: ['post', post._id] });
-      
     } catch (error) {
-      console.error(`Error ${direction}voting post:`, error);
-      toast.error(`Failed to ${direction}vote post. Please try again.`);
+      console.error(`Error processing vote:`, error);
+      toast.error("Failed to register vote. Please try again.");
       
-      // Revert optimistic update
-      setUserVote(userVote);
-      setScore(post.upvotes - post.downvotes);
+      // Refresh the post to get accurate data
+      try {
+        const response = await api.get(`/api/posts/${post._id}`);
+        const freshPost = response.data.data;
+        setScore(freshPost.upvotes - freshPost.downvotes);
+        
+        // Determine user's actual vote state from localStorage
+        const voteKey = `post_vote_${post._id}_${user._id}`;
+        const storedVote = localStorage.getItem(voteKey);
+        setUserVote(storedVote as 'up' | 'down' | null);
+      } catch (refreshError) {
+        console.error("Error refreshing post data:", refreshError);
+      }
+    } finally {
+      setIsVoting(false);
     }
   };
   
@@ -232,9 +285,9 @@ export const PostCard = ({ post, onPostDeleted }: PostCardProps) => {
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">
+                <Link to={`/profile/${authorName}`} className="font-medium text-foreground hover:underline">
                   {authorName}
-                </span>
+                </Link>
                 <span className="mx-1">•</span>
                 <span>
                   {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}

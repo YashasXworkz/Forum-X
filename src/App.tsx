@@ -23,6 +23,8 @@ import CreateDiscussion from "./pages/CreateDiscussion";
 import Discussion from "./pages/Discussion";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+import VideoChat from "./pages/VideoChat";
+import Profile from "./pages/Profile";
 // Import Debug only in development mode
 const Debug = import.meta.env.DEV ? import("./pages/Debug").then(mod => mod.default) : null;
 
@@ -211,6 +213,30 @@ const App = () => {
                     element={
                       <PageTransition>
                         <Settings />
+                      </PageTransition>
+                    } 
+                  />
+                  <Route 
+                    path="/video/:roomId" 
+                    element={
+                      <PageTransition>
+                        <VideoChat />
+                      </PageTransition>
+                    } 
+                  />
+                  <Route 
+                    path="/video" 
+                    element={
+                      <PageTransition>
+                        <VideoChat />
+                      </PageTransition>
+                    } 
+                  />
+                  <Route 
+                    path="/profile/:username" 
+                    element={
+                      <PageTransition>
+                        <Profile />
                       </PageTransition>
                     } 
                   />

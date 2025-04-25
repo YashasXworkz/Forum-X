@@ -1,12 +1,14 @@
 import React, { useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/auth';
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, Camera, CameraOff } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { ArrowLeft } from 'lucide-react';
 
 // Types
 interface VideoConferenceProps {
   discussionId: string;
+  onBack?: () => void;
 }
 
 declare global {
@@ -15,9 +17,10 @@ declare global {
   }
 }
 
-const VideoConference: React.FC<VideoConferenceProps> = ({ discussionId }) => {
+const VideoConference: React.FC<VideoConferenceProps> = ({ discussionId, onBack }) => {
   const { user } = useAuth();
   const containerRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
   
   useEffect(() => {
     // Load ZegoCloud script
@@ -37,60 +40,20 @@ const VideoConference: React.FC<VideoConferenceProps> = ({ discussionId }) => {
       });
     };
 
-    // Style tweaks for ZegoCloud UI
-    const addCustomStyles = () => {
-      const styleEl = document.createElement('style');
-      styleEl.id = 'zego-custom-styles';
-      styleEl.textContent = `
-        :root {
-          --zego-primary-color: var(--primary);
-          --zego-sidebar-bg-color: var(--background);
-          --zego-border-color: var(--border);
-          --zego-foreground-color: var(--foreground);
-          --zego-button-primary-color: var(--primary);
-          --zego-button-text-color: var(--primary-foreground);
-        }
-        
-        .ZegoRoomContainer {
-          border-radius: 0.5rem;
-          overflow: hidden;
-          background-color: var(--background);
-          color: var(--foreground);
-        }
-        
-        .ZegoRoom_container {
-          background-color: hsl(var(--card) / 0.8);
-        }
-        
-        .ZegoButton_button {
-          border-radius: 0.375rem;
-        }
-      `;
-      document.head.appendChild(styleEl);
-      
-      return () => {
-        const styleElement = document.getElementById('zego-custom-styles');
-        if (styleElement) {
-          styleElement.remove();
-        }
-      };
-    };
-
     const initializeZegoCloud = async () => {
       try {
         await loadZegoScript();
         
         if (!containerRef.current || !window.ZegoUIKitPrebuilt) return;
         
-        // Add custom styles before initializing
-        const removeStyles = addCustomStyles();
-        
+        // Parameters for the connection
         const roomID = discussionId;
         const userID = user?._id || Math.floor(Math.random() * 10000).toString();
         const userName = user?.username || "Guest";
-        const appID = 1197356487;
-        const serverSecret = "ae07d4117925b5e2d80c7ccb654eb4a6";
+        const appID = 434816214;
+        const serverSecret = "34ed80675b0aaaa71730529f563dd474";
         
+        // Generate token
         const kitToken = window.ZegoUIKitPrebuilt.generateKitTokenForTest(
           appID, 
           serverSecret, 
@@ -99,8 +62,10 @@ const VideoConference: React.FC<VideoConferenceProps> = ({ discussionId }) => {
           userName
         );
         
+        // Create ZegoUIKit instance
         const zp = window.ZegoUIKitPrebuilt.create(kitToken);
         
+        // Join the room
         zp.joinRoom({
           container: containerRef.current,
           sharedLinks: [{
@@ -121,13 +86,6 @@ const VideoConference: React.FC<VideoConferenceProps> = ({ discussionId }) => {
           maxUsers: 50,
           layout: "Grid",
           showLayoutButton: true,
-          branding: {
-            logoURL: "",
-          },
-          onLeaveRoom: () => {
-            // Clean up
-            removeStyles();
-          },
         });
       } catch (error) {
         console.error("Error initializing ZegoCloud:", error);
@@ -142,21 +100,33 @@ const VideoConference: React.FC<VideoConferenceProps> = ({ discussionId }) => {
       if (zegoScript) {
         zegoScript.remove();
       }
-      
-      const styleElement = document.getElementById('zego-custom-styles');
-      if (styleElement) {
-        styleElement.remove();
-      }
     };
   }, [discussionId, user]);
 
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      navigate(-1);
+    }
+  };
+
   return (
-    <Card className="flex flex-col h-full border-0 shadow-none overflow-hidden">
+    <Card className="flex flex-col h-full border-0 shadow-none overflow-hidden relative">
+      <Button 
+        onClick={handleBack}
+        variant="default"
+        className="absolute top-2 left-2 z-50 flex items-center"
+      >
+        <ArrowLeft className="mr-2 h-4 w-4" />
+        Back to Dashboard
+      </Button>
+      
       <div className="flex-1 rounded-md overflow-hidden">
         <div 
           ref={containerRef}
           className="w-full h-full rounded-md overflow-hidden"
-          style={{ minHeight: '450px' }}
+          style={{ minHeight: '80vh' }}
         />
       </div>
     </Card>

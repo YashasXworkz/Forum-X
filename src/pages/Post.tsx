@@ -21,12 +21,24 @@ const Post = () => {
     error: postError
   } = usePost(postId || "");
   
-  // Fetch comments for the post
+  // Fetch comments for the post with shorter stale time for quicker updates
   const { 
     data: comments = [],
     isLoading: isLoadingComments,
-    error: commentsError
+    error: commentsError,
+    refetch: refetchComments
   } = usePostComments(postId || "");
+  
+  // Setup periodic comment refetching to ensure new replies appear
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      if (postId) {
+        refetchComments();
+      }
+    }, 10000); // Refetch every 10 seconds
+    
+    return () => clearInterval(intervalId);
+  }, [postId, refetchComments]);
   
   useEffect(() => {
     if (postError) {
@@ -51,8 +63,8 @@ const Post = () => {
   if (isLoadingPost) {
     return (
       <Layout>
-        <div className="max-w-4xl mx-auto px-4 py-6">
-          <div className="mb-6">
+        <div className="max-w-4xl mx-auto px-4 py-4 overflow-visible">
+          <div className="mb-4">
             <div className="h-8 w-40 rounded-md bg-gray-200 animate-pulse"></div>
           </div>
           <div className="space-y-4">
@@ -68,7 +80,7 @@ const Post = () => {
   if (!post && !isLoadingPost) {
     return (
       <Layout>
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-4xl mx-auto overflow-visible">
           <div className="text-center py-10">
             <h2 className="text-2xl font-bold">Post not found</h2>
             <p className="mt-2 text-muted-foreground">
@@ -92,8 +104,8 @@ const Post = () => {
   
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto px-4 py-6">
-        <div className="mb-6">
+      <div className="max-w-4xl mx-auto px-4 py-2 overflow-visible">
+        <div className="mb-4">
           <Button 
             variant="ghost" 
             size="sm" 
@@ -113,6 +125,18 @@ const Post = () => {
               postId={effectivePostId}
               comments={comments}
             />
+            
+            {/* Float button to refresh comments */}
+            <div className="fixed bottom-4 right-4 md:bottom-8 md:right-8 z-10">
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                className="shadow-md"
+                onClick={() => refetchComments()}
+              >
+                Refresh Comments
+              </Button>
+            </div>
           </>
         )}
       </div>

@@ -186,20 +186,25 @@
         --sidebar-border: 0 10% 18%;
         --sidebar-ring: 0 90% 60%;
     }
-}
 
-@layer base {
     * {
         @apply border-border;
     }
 
-    html {
+    html, body {
         @apply antialiased;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden;
     }
 
     body {
         @apply bg-background text-foreground;
         font-feature-settings: "rlig" 1, "calt" 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        position: relative;
     }
 
     .glass-panel {

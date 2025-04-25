@@ -15,7 +15,7 @@ export const Layout = ({ children }: LayoutProps) => {
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <div className="flex h-screen w-full overflow-hidden">
+      <div className="flex h-screen w-full overflow-hidden fixed inset-0">
         {/* Matrix Rain Effect (Only visible in matrix theme) */}
         {isMatrix && (
           <div className="absolute inset-0 pointer-events-none z-0 opacity-10">
@@ -25,16 +25,16 @@ export const Layout = ({ children }: LayoutProps) => {
         
         <AppSidebar />
         
-        <div className="flex-1 flex flex-col h-full overflow-auto">
+        <div className="flex-1 flex flex-col h-full">
           <Header />
           <main 
             className={cn(
-              "flex-1 pt-0 pb-4 animate-fade-in",
+              "flex-1 pt-0 pb-0 animate-fade-in overflow-auto",
               isMatrix ? "text-hsl-matrix-green" : ""
             )}
           >
             <div className={cn(
-              "container px-4 py-4 md:px-6",
+              "container px-4 py-4 md:px-6 pb-6",
               isMatrix && "matrix-card rounded-lg"
             )}>
               {children}

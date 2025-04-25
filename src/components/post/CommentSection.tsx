@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -52,6 +52,9 @@ export const CommentSection = ({ postId, comments }: CommentSectionProps) => {
   const [commentText, setCommentText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const queryClient = useQueryClient();
+
+  // Log comments for debugging
+  console.log('Comments received in CommentSection:', comments);
 
   const handleSubmitComment = async () => {
     // User is logged in according to UI but we need to ensure the token exists
@@ -128,14 +131,14 @@ export const CommentSection = ({ postId, comments }: CommentSectionProps) => {
   };
 
   return (
-    <div className="mt-6">
+    <div className="mt-6 mb-12">
       <div className="mb-6">
         <h3 className="text-lg font-semibold mb-4">Post a Comment</h3>
         
         {user ? (
           <div className="space-y-4">
             <Textarea 
-              className="min-h-32"
+              className="min-h-20"
               placeholder="What are your thoughts?"
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
@@ -195,6 +198,13 @@ const CommentItem = ({ comment, postId, level = 0 }: CommentItemProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(comment.content);
   const queryClient = useQueryClient();
+  
+  // Add debug logging to help troubleshoot nested replies
+  useEffect(() => {
+    if (level > 0) {
+      console.log(`Rendering level ${level} reply:`, comment.id, 'has replies:', comment.replies?.length || 0);
+    }
+  }, [comment, level]);
   
   const handleVote = async (direction: "up" | "down") => {
     if (!user) {
@@ -294,52 +304,48 @@ const CommentItem = ({ comment, postId, level = 0 }: CommentItemProps) => {
     if (!replyText.trim()) return;
     
     try {
-      // Determine the correct username - like we did for comments
-      const currentUsername = user.username || document.querySelector('.logged-in')?.textContent?.replace('Logged in as', '').trim() || 'zero';
+      console.log('Submitting reply to comment:', comment.id);
       
-      console.log('Submitting reply with user:', { ...user, forcedUsername: currentUsername });
-      console.log('Reply to comment:', comment.id);
-      
-      // Create a request body with the necessary data
-      const requestBody = {
-        content: replyText.trim(),
-        username: currentUsername,
-        parentId: comment.id,
-        forceCurrentUser: true
-      };
-      
-      // Make direct API call instead of using the createComment function
-      const response = await axios.post(
-        `${API_URL}/api/posts/${postId}/comments`,
-        requestBody,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token') || 'fallback-token'}`
-          }
-        }
-      );
-      
-      console.log('Reply posted successfully:', response.data);
+      // Use the createComment function from api.ts instead of direct axios call
+      await createComment(postId, replyText.trim(), comment.id);
       
       // Invalidate query to refresh comments
       queryClient.invalidateQueries({
         queryKey: ["postComments", postId]
       });
       
-      toast({
-        title: "Reply added",
-        description: "Your reply has been posted",
+      // Force refetch immediately
+      await queryClient.refetchQueries({
+        queryKey: ["postComments", postId],
+        exact: true,
       });
       
-      setIsReplying(false);
-      setReplyText("");
+      // Add a small delay to ensure the data is refreshed before closing the form
+      setTimeout(() => {
+        toast({
+          title: "Reply added",
+          description: "Your reply has been posted",
+        });
+        
+        setIsReplying(false);
+        setReplyText("");
+      }, 800);
     } catch (error: any) {
       console.error('Reply submission error:', error);
       
+      // If this is an authentication error, show a specific message
+      if (error.message?.includes('Authentication')) {
+        toast({
+          title: "Authentication required",
+          description: "Please sign in to post a reply",
+          variant: "destructive",
+        });
+        return;
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to post your reply. Please try refreshing the page and signing in again.",
+        description: error.message || "Failed to post your reply. Please try again.",
         variant: "destructive",
       });
     }
@@ -442,7 +448,10 @@ const CommentItem = ({ comment, postId, level = 0 }: CommentItemProps) => {
   };
   
   return (
-    <div className={`${level > 0 ? "ml-6 pl-4 border-l border-border" : ""}`}>
+    <div className={`${level > 0 ? "ml-6 pl-4 border-l border-border" : ""} comment-level-${level}`}>
+      {/* Debug info to help identify issues */}
+      {/* <div className="text-xs text-muted-foreground">Level: {level}, ID: {comment.id.slice(-4)}, Parent: {comment.parentId?.slice(-4) || 'none'}</div> */}
+      
       <div className="flex items-start space-x-2 mb-2">
         <Avatar className="h-8 w-8">
           <AvatarFallback>{comment.authorUsername.charAt(0).toUpperCase()}</AvatarFallback>
@@ -462,7 +471,7 @@ const CommentItem = ({ comment, postId, level = 0 }: CommentItemProps) => {
             {isEditing ? (
               <Textarea
                 placeholder="Edit your comment..."
-                className="min-h-24 text-sm"
+                className="min-h-[100px] text-sm"
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
               />
@@ -531,7 +540,7 @@ const CommentItem = ({ comment, postId, level = 0 }: CommentItemProps) => {
             <div className="mt-3 space-y-2">
               <Textarea
                 placeholder="Write a reply..."
-                className="min-h-24 text-sm"
+                className="min-h-[80px] text-sm"
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
               />
@@ -560,9 +569,14 @@ const CommentItem = ({ comment, postId, level = 0 }: CommentItemProps) => {
       </div>
       
       {comment.replies && comment.replies.length > 0 && (
-        <div className="mt-4 space-y-4">
+        <div className={`mt-4 space-y-4 replies-container ${level > 2 ? "border-l-2 border-primary/10 pl-2" : ""}`}>
           {comment.replies.map(reply => (
-            <CommentItem key={reply.id} comment={reply} postId={postId} level={level + 1} />
+            <CommentItem 
+              key={reply.id} 
+              comment={reply} 
+              postId={postId} 
+              level={level + 1} 
+            />
           ))}
         </div>
       )}

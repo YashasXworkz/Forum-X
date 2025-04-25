@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageSquare, Users, ArrowLeft, Clock, Send, X, Mic, MicOff, Video } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
-import { useSocket, ChatMessage, UserTyping } from "@/lib/socket";
+import { useSocket, ChatMessage } from "@/lib/socket";
 import api, { API_URL } from "@/lib/axios";
 import { format } from "date-fns";
 import { Input } from "@/components/ui/input";
@@ -605,7 +605,10 @@ const Discussion = () => {
             </TabsContent>
             
             <TabsContent value="video" className="flex-1 data-[state=inactive]:hidden">
-              <VideoConference discussionId={discussionId || ''} />
+              <VideoConference 
+                discussionId={discussionId || ''} 
+                onBack={() => setIsChatOpen(false)}
+              />
             </TabsContent>
           </Tabs>
         </div>
